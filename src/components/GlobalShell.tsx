@@ -3,8 +3,9 @@
 import { useKey } from 'react-use';
 import { usePDFStore } from '@/store/usePDFStore';
 import HelpModal from './HelpModal';
+import FinderModal from './FinderModal';
 import VimInput from './VimInput';
-import { useRef } from 'react';
+import { useRef, useEffect } from 'react';
 
 export default function GlobalShell({ children }: { children: React.ReactNode }) {
     const {
@@ -16,9 +17,23 @@ export default function GlobalShell({ children }: { children: React.ReactNode })
         setFocusMode,
         setFile,
         pendingCommand,
+        finderOpen,
+        toggleFinder,
+        hydrateRecentFiles,
     } = usePDFStore();
 
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Initial Hydration
+    useEffect(() => {
+        const init = async () => {
+            // Rehydrate the persisted names/settings from localStorage
+            await usePDFStore.persist.rehydrate();
+            // Then load the actual file blobs from IndexedDB
+            await hydrateRecentFiles();
+        };
+        init();
+    }, [hydrateRecentFiles]);
 
     const handleOpenFile = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -31,6 +46,16 @@ export default function GlobalShell({ children }: { children: React.ReactNode })
         (e) => true,
         (e) => {
             if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
+
+            // Open Finder (Strict 'r' without modifiers)
+            if (e.key === 'r' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                e.preventDefault();
+                toggleFinder();
+                return;
+            }
+
+            // If finder is open, let it handle its own keys
+            if (finderOpen) return;
 
             // Open File
             if (e.key === 'o') {
@@ -68,13 +93,14 @@ export default function GlobalShell({ children }: { children: React.ReactNode })
             }
         },
         { event: 'keydown' },
-        [helpOpen, focusMode, sidebarOpen, pendingCommand]
+        [helpOpen, focusMode, sidebarOpen, pendingCommand, finderOpen, toggleFinder]
     );
 
     return (
         <div className="relative w-full h-full">
             {children}
             <HelpModal />
+            <FinderModal />
             <VimInput />
             <input
                 type="file"

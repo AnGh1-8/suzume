@@ -70,26 +70,16 @@ Press `?` in the app to view the full help menu.
 
 ### Navigation (PDF)
 
-| Key        | Action                  |
-| :--------- | :---------------------- |
-| `j` / `k`  | Scroll Down / Up        |
-| `d` / `u`  | Fast Scroll Down / Up   |
-| `h` / `l`  | Previous / Next Page    |
-| `Ctrl + o` | Jump Back in History    |
-| `Ctrl + i` | Jump Forward in History |
-| `gg`       | Go to First Page        |
-| `G`        | Go to Last Page         |
-| `zz`       | Center Page in View     |
-
-### Outline / Sidebar
-
-| Key       | Action                       |
-| :-------- | :--------------------------- |
-| `t`       | Toggle Sidebar Visibility    |
-| `Esc`     | Toggle Focus (PDF ↔ Outline) |
-| `j` / `k` | Navigate Items               |
-| `l` / `h` | Expand / Collapse Section    |
-| `Enter`   | Jump to Chapter              |
+| Key                | Action                                |
+| :----------------- | :------------------------------------ |
+| `j` / `k`          | Scroll Down / Up                      |
+| `d` / `u`          | Fast Scroll Down / Up                 |
+| `h` / `l`          | Previous / Next Page                  |
+| `ctrl + o`         | Jump Back in History                  |
+| `ctrl + i`         | Jump Forward in History               |
+| `gg` / `G`         | Go to First / Last Page               |
+| `:[num]`           | Jump to Page (e.g. `:10`)             |
+| `zz` / `zt` / `zb` | View Position (Center / Top / Bottom) |
 
 ### View Control
 
@@ -97,9 +87,28 @@ Press `?` in the app to view the full help menu.
 | :----------------- | :----------------------------------------- |
 | `:w [num]`         | Fit Width (default 90%). Example: `:w 100` |
 | `:z [num]`         | Set Zoom %. Example: `:z 150`              |
+| `+` / `-`          | Quick Zoom In / Out                        |
 | `:fit`             | Fit Whole Page                             |
 | `:fs`              | Toggle Fullscreen                          |
-| `:dark` / `:light` | Switch Theme                               |
+| `:dark` / `:light` | Switch Theme (Dark / Light)                |
+
+### Outline / Interaction
+
+| Key       | Action                                    |
+| :-------- | :---------------------------------------- |
+| `t`       | Toggle Sidebar Visibility                 |
+| `Esc`     | Toggle Focus (PDF ↔ Outline) / Close Help |
+| `j` / `k` | Navigate Outline Items                    |
+| `l` / `h` | Expand / Collapse Folder                  |
+| `Enter`   | Select & Jump to Chapter                  |
+
+### General
+
+| Key | Action              |
+| :-- | :------------------ |
+| `o` | Open New File       |
+| `r` | Recent Files Finder |
+| `?` | Toggle Help Menu    |
 
 ## 🛠️ Tech Stack
 

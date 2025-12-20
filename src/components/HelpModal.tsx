@@ -49,6 +49,7 @@ export default function HelpModal() {
             icon: <Command size={16} />,
             items: [
                 { key: 'o', desc: 'Open File' },
+                { key: 'r', desc: 'Recent Files' },
                 { key: 't', desc: 'Toggle Sidebar' },
                 { key: 'Esc', desc: 'Focus Outline (from PDF)' },
                 { key: ':dark / :light', desc: 'Switch Theme' },

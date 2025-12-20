@@ -164,6 +164,9 @@ export default function PDFReader({ file }: PDFReaderProps) {
 
         const calculateScale = async () => {
             try {
+                // Safety check: ensure currentPage is within bounds of the current document
+                if (currentPage > pdfDocument.numPages) return;
+
                 const page = await pdfDocument.getPage(currentPage);
                 const viewport = page.getViewport({ scale: 1 });
                 const { width: pageWidth, height: pageHeight } = viewport;
