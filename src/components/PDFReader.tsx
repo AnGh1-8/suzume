@@ -412,6 +412,8 @@ export default function PDFReader({ file }: PDFReaderProps) {
 
         // Strict capture-phase listener to block browser Ctrl+O/I
         const handleCaptureKeyPress = (e: KeyboardEvent) => {
+            if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
+
             // ONLY ctrl, NOT meta (Cmd), and small o/i
             if (e.ctrlKey && !e.metaKey && (e.key === 'o' || e.key === 'i')) {
                 e.preventDefault();
@@ -446,6 +448,9 @@ export default function PDFReader({ file }: PDFReaderProps) {
     useKey(
         (e) => true,
         (e) => {
+            // 1. Ignore if typing in an input or textarea
+            if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
+
             // 2. Handle Pending State (Modal Priority)
             if (pendingCommand) {
                 e.preventDefault();
