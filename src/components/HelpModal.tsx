@@ -18,6 +18,7 @@ export default function HelpModal() {
                 { key: 'd / u', desc: 'Fast Scroll' },
                 { key: 'h / l', desc: 'Page Prev / Next' },
                 { key: 'gg / G', desc: 'Start / End' },
+                { key: ':[num]', desc: 'Jump to Page (e.g. :10)' },
                 { key: 'zz / zt / zb', desc: 'Position View' },
             ],
         },

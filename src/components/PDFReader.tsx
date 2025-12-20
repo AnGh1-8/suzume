@@ -145,7 +145,6 @@ export default function PDFReader({ file }: PDFReaderProps) {
 
             const pageIndex = await pdfDocument.getPageIndex(explicitDest[0]);
             setCurrentPage(pageIndex + 1);
-            listRef.current?.scrollToRow({ index: pageIndex, align: 'start' });
         } catch (e) {
             console.error('Jump error', e);
         }
@@ -253,6 +252,10 @@ export default function PDFReader({ file }: PDFReaderProps) {
     const currentPageRef = useRef(currentPage);
     const baseHeightRef = useRef(baseHeight);
 
+    // Flag to distinguish between page changes from scrolling (internal)
+    // vs page changes from commands (external, e.g. :10)
+    const isInternalPageUpdate = useRef(false);
+
     useEffect(() => {
         scaleRef.current = scale;
     }, [scale]);
@@ -262,6 +265,28 @@ export default function PDFReader({ file }: PDFReaderProps) {
     useEffect(() => {
         baseHeightRef.current = baseHeight;
     }, [baseHeight]);
+
+    // Sync Scroll to Page Change (e.g. from Command :10)
+    useEffect(() => {
+        if (!listRef.current?.element || !numPages) return;
+
+        // If the change came from scrolling, don't snap the scroll position
+        if (isInternalPageUpdate.current) {
+            isInternalPageUpdate.current = false;
+            return;
+        }
+
+        // Calculate where we should be for this page
+        const targetPage = currentPage;
+        const itemHeight = baseHeightRef.current * scaleRef.current + 4;
+        const targetScrollTop = (targetPage - 1) * itemHeight;
+
+        // Snap to the new page
+        listRef.current?.element?.scrollTo({
+            top: Math.round(targetScrollTop),
+            behavior: 'instant',
+        });
+    }, [currentPage, numPages]);
 
     const updatePageFromScroll = useCallback(
         (scrollTop: number) => {
@@ -282,6 +307,7 @@ export default function PDFReader({ file }: PDFReaderProps) {
             }
 
             if (!isNaN(newPage) && newPage !== currentPageRef.current) {
+                isInternalPageUpdate.current = true;
                 setCurrentPage(newPage);
             }
         },
@@ -332,12 +358,10 @@ export default function PDFReader({ file }: PDFReaderProps) {
 
         if (changed) {
             // Use scrollTo with 'instant' behavior to avoid browser interference
-            listRef.current.element.scrollTo({
+            listRef.current?.element?.scrollTo({
                 top: Math.round(nextScrollTop),
                 behavior: 'instant',
             });
-            // Manually sync page number for programmatic scroll
-            updatePageFromScroll(nextScrollTop);
         }
 
         if (activeKeys.current.size > 0) {
@@ -436,7 +460,6 @@ export default function PDFReader({ file }: PDFReaderProps) {
                         // gg -> Top
                         if (listRef.current) {
                             setCurrentPage(1);
-                            listRef.current.scrollToRow({ index: 0, align: 'start' });
                         }
                         setPendingCommand(null);
                     } else if (!['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) {
@@ -480,7 +503,6 @@ export default function PDFReader({ file }: PDFReaderProps) {
                 e.preventDefault();
                 if (listRef.current && numPages) {
                     setCurrentPage(numPages);
-                    listRef.current.scrollToRow({ index: numPages - 1, align: 'start' });
                 }
                 return;
             }
@@ -545,14 +567,12 @@ export default function PDFReader({ file }: PDFReaderProps) {
                     if (listRef.current && currentPageRef.current < (numPages || 0)) {
                         const nextPage = currentPageRef.current + 1;
                         setCurrentPage(nextPage);
-                        listRef.current.scrollToRow({ index: nextPage - 1, align: 'start' });
                     }
                 } else if (e.key === 'h' || e.key === 'ArrowLeft') {
                     e.preventDefault();
                     if (listRef.current && currentPageRef.current > 1) {
                         const prevPage = currentPageRef.current - 1;
                         setCurrentPage(prevPage);
-                        listRef.current.scrollToRow({ index: prevPage - 1, align: 'start' });
                     }
                 }
             }
@@ -619,7 +639,7 @@ export default function PDFReader({ file }: PDFReaderProps) {
                             <PDFOutline
                                 items={flatOutline}
                                 selectedPath={selectedPath}
-                                onItemClick={(item) => {
+                                onItemClick={(item: FlatOutlineItem) => {
                                     setSelectedPath(item.path);
                                     if (item.dest) jumpToDestination(item.dest);
                                 }}
