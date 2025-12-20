@@ -15,6 +15,8 @@ interface PDFState {
     theme: 'light' | 'dark';
     fitMode: 'custom' | 'fit-width' | 'fit-page';
     fitRatio: number; // For fit-width (0.9 default)
+    jumpHistory: number[];
+    historyIndex: number;
 
     setFile: (file: File | string | null) => void;
     setNumPages: (num: number) => void;
@@ -32,6 +34,11 @@ interface PDFState {
     setTheme: (theme: 'light' | 'dark') => void;
     setFitMode: (mode: 'custom' | 'fit-width' | 'fit-page') => void;
     setFitRatio: (ratio: number) => void;
+
+    // History Actions
+    addToHistory: (page: number) => void;
+    goBackInHistory: () => number | null;
+    goForwardInHistory: () => number | null;
 
     // Actions for zoom
     zoomIn: () => void;
@@ -55,8 +62,10 @@ export const usePDFStore = create<PDFState>((set) => ({
     theme: 'dark',
     fitMode: 'fit-width',
     fitRatio: 0.9,
+    jumpHistory: [],
+    historyIndex: -1,
 
-    setFile: (file) => set({ file }),
+    setFile: (file) => set({ file, jumpHistory: [], historyIndex: -1 }),
     setNumPages: (numPages) => set({ numPages }),
     setCurrentPage: (currentPage) => set({ currentPage }),
     setScale: (scale) => set({ scale }),
@@ -87,6 +96,60 @@ export const usePDFStore = create<PDFState>((set) => ({
     setTheme: (theme) => set({ theme }),
     setFitMode: (mode) => set({ fitMode: mode }),
     setFitRatio: (ratio) => set({ fitRatio: ratio }),
+
+    addToHistory: (page) =>
+        set((state) => {
+            const currentHistory = state.jumpHistory;
+            const currentIndex = state.historyIndex;
+
+            // If we are navigating in the middle, truncate the "future"
+            // But keep current item if we're moving past it
+            const newHistory = currentHistory.slice(0, currentIndex + 1);
+
+            // Avoid consecutive duplicates
+            if (newHistory.length > 0 && newHistory[newHistory.length - 1] === page) {
+                // If we are at the end already, just return
+                if (currentIndex === currentHistory.length - 1) return state;
+                // Otherwise move index to the match
+                return { historyIndex: newHistory.length - 1 };
+            }
+
+            const updatedHistory = [...newHistory, page];
+            if (updatedHistory.length > 50) {
+                updatedHistory.shift();
+            }
+
+            return {
+                jumpHistory: updatedHistory,
+                historyIndex: updatedHistory.length - 1,
+            };
+        }),
+
+    goBackInHistory: () => {
+        let page: number | null = null;
+        set((state) => {
+            if (state.historyIndex > 0) {
+                const newIndex = state.historyIndex - 1;
+                page = state.jumpHistory[newIndex];
+                return { historyIndex: newIndex };
+            }
+            return state;
+        });
+        return page;
+    },
+
+    goForwardInHistory: () => {
+        let page: number | null = null;
+        set((state) => {
+            if (state.historyIndex < state.jumpHistory.length - 1) {
+                const newIndex = state.historyIndex + 1;
+                page = state.jumpHistory[newIndex];
+                return { historyIndex: newIndex };
+            }
+            return state;
+        });
+        return page;
+    },
 
     toggleHelp: () => set((state) => ({ helpOpen: !state.helpOpen })),
 

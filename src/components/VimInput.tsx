@@ -10,7 +10,16 @@ export default function VimInput() {
     const [value, setValue] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
 
-    const { setTheme, theme, setFitMode, setScale, setFitRatio, setCurrentPage } = usePDFStore();
+    const {
+        setTheme,
+        theme,
+        setFitMode,
+        setScale,
+        setFitRatio,
+        setCurrentPage,
+        addToHistory,
+        currentPage,
+    } = usePDFStore();
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -72,13 +81,17 @@ export default function VimInput() {
                 }
             } else if (['go', 'page', 'p', 'n'].includes(cmd)) {
                 if (arg && !isNaN(arg) && arg > 0) {
+                    addToHistory(currentPage);
                     setCurrentPage(arg);
+                    addToHistory(arg);
                 }
             } else if (!isNaN(parseInt(cmd, 10))) {
                 // Handle direct number input (e.g., :42)
                 const pageNum = parseInt(cmd, 10);
                 if (pageNum > 0) {
+                    addToHistory(currentPage);
                     setCurrentPage(pageNum);
+                    addToHistory(pageNum);
                 }
             }
         }

@@ -70,14 +70,16 @@ Press `?` in the app to view the full help menu.
 
 ### Navigation (PDF)
 
-| Key       | Action                |
-| :-------- | :-------------------- |
-| `j` / `k` | Scroll Down / Up      |
-| `d` / `u` | Fast Scroll Down / Up |
-| `h` / `l` | Previous / Next Page  |
-| `gg`      | Go to First Page      |
-| `G`       | Go to Last Page       |
-| `zz`      | Center Page in View   |
+| Key        | Action                  |
+| :--------- | :---------------------- |
+| `j` / `k`  | Scroll Down / Up        |
+| `d` / `u`  | Fast Scroll Down / Up   |
+| `h` / `l`  | Previous / Next Page    |
+| `Ctrl + o` | Jump Back in History    |
+| `Ctrl + i` | Jump Forward in History |
+| `gg`       | Go to First Page        |
+| `G`        | Go to Last Page         |
+| `zz`       | Center Page in View     |
 
 ### Outline / Sidebar
 

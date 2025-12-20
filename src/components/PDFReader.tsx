@@ -72,6 +72,11 @@ export default function PDFReader({ file }: PDFReaderProps) {
         setFitMode,
         setFitRatio,
         setScale,
+        addToHistory,
+        goBackInHistory,
+        goForwardInHistory,
+        helpOpen,
+        toggleHelp,
     } = usePDFStore();
 
     const listRef = useRef<any>(null);
@@ -144,7 +149,10 @@ export default function PDFReader({ file }: PDFReaderProps) {
             if (!explicitDest) return;
 
             const pageIndex = await pdfDocument.getPageIndex(explicitDest[0]);
-            setCurrentPage(pageIndex + 1);
+            addToHistory(currentPage);
+            const targetPage = pageIndex + 1;
+            setCurrentPage(targetPage);
+            addToHistory(targetPage);
         } catch (e) {
             console.error('Jump error', e);
         }
@@ -399,19 +407,43 @@ export default function PDFReader({ file }: PDFReaderProps) {
         window.addEventListener('keydown', onKeyDown);
         window.addEventListener('keyup', onKeyUp);
 
+        // Strict capture-phase listener to block browser Ctrl+O/I
+        const handleCaptureKeyPress = (e: KeyboardEvent) => {
+            // ONLY ctrl, NOT meta (Cmd), and small o/i
+            if (e.ctrlKey && !e.metaKey && (e.key === 'o' || e.key === 'i')) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                if (e.key === 'o') {
+                    const targetPage = goBackInHistory();
+                    if (targetPage) {
+                        isInternalPageUpdate.current = false;
+                        setCurrentPage(targetPage);
+                    }
+                } else {
+                    const targetPage = goForwardInHistory();
+                    if (targetPage) {
+                        isInternalPageUpdate.current = false;
+                        setCurrentPage(targetPage);
+                    }
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handleCaptureKeyPress, { capture: true });
+
         return () => {
             window.removeEventListener('keydown', onKeyDown);
             window.removeEventListener('keyup', onKeyUp);
+            window.removeEventListener('keydown', handleCaptureKeyPress, { capture: true });
             if (requestRef.current) cancelAnimationFrame(requestRef.current);
         };
-    }, [focusMode]);
+    }, [focusMode, goBackInHistory, goForwardInHistory, setCurrentPage]);
 
     useKey(
         (e) => true,
         (e) => {
-            if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
-
-            // 1. Handle Pending State (Modal Priority)
+            // 2. Handle Pending State (Modal Priority)
             if (pendingCommand) {
                 e.preventDefault();
 
@@ -439,7 +471,7 @@ export default function PDFReader({ file }: PDFReaderProps) {
                             targetTop = pStart; // zt
                         else if (e.key === 'b') targetTop = pStart - (vHeight - currentItemHeight); // zb
 
-                        listRef.current.element.scrollTo({
+                        listRef.current?.element?.scrollTo({
                             top: Math.round(targetTop),
                             behavior: 'instant',
                         });
@@ -459,7 +491,9 @@ export default function PDFReader({ file }: PDFReaderProps) {
                     if (e.key === 'g') {
                         // gg -> Top
                         if (listRef.current) {
+                            addToHistory(currentPage);
                             setCurrentPage(1);
+                            addToHistory(1);
                         }
                         setPendingCommand(null);
                     } else if (!['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) {
@@ -471,12 +505,14 @@ export default function PDFReader({ file }: PDFReaderProps) {
                 return;
             }
 
-            // 2. Normal Mode Key Bindings
+            // 3. Normal Mode Key Bindings
 
-            // Toggle Focus (Esc)
+            // Escape Handling (Priority: Help > Pending > Outline focus > Sidebar focus)
             if (e.key === 'Escape') {
                 e.preventDefault();
-                if (focusMode === 'outline') {
+                if (helpOpen) {
+                    toggleHelp();
+                } else if (focusMode === 'outline') {
                     setFocusMode('pdf');
                 } else if (sidebarOpen) {
                     setFocusMode('outline');
@@ -502,7 +538,9 @@ export default function PDFReader({ file }: PDFReaderProps) {
             if (e.key === 'G') {
                 e.preventDefault();
                 if (listRef.current && numPages) {
+                    addToHistory(currentPage);
                     setCurrentPage(numPages);
+                    addToHistory(numPages);
                 }
                 return;
             }
@@ -578,7 +616,17 @@ export default function PDFReader({ file }: PDFReaderProps) {
             }
         },
         { event: 'keydown' },
-        [focusMode, flatOutline, selectedPath, numPages, pdfDocument, pendingCommand]
+        [
+            focusMode,
+            flatOutline,
+            selectedPath,
+            numPages,
+            pdfDocument,
+            pendingCommand,
+            helpOpen,
+            toggleHelp,
+            sidebarOpen,
+        ]
     );
 
     return (
