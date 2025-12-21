@@ -214,12 +214,12 @@ export const usePDFStore = create<PDFState>()(
 
             zoomIn: () =>
                 set((state) => ({
-                    visualScale: Math.min(state.visualScale + 0.1, 3),
+                    visualScale: Math.min(state.visualScale + 0.05, 3),
                     fitMode: 'custom',
                 })),
             zoomOut: () =>
                 set((state) => ({
-                    visualScale: Math.max(state.visualScale - 0.1, 0.5),
+                    visualScale: Math.max(state.visualScale - 0.05, 0.5),
                     fitMode: 'custom',
                 })),
         }),

@@ -355,6 +355,7 @@ export default function PDFReader({ file }: PDFReaderProps) {
 
         const SPEED = 15;
         const FAST_SPEED = 60; // 4x speed for d/u
+        const ZOOM_SPEED = 0.02; // Per-frame zoom increment for smooth zooming
 
         let nextScrollTop = listRef.current.element.scrollTop;
         let changed = false;
@@ -376,7 +377,25 @@ export default function PDFReader({ file }: PDFReaderProps) {
             changed = true;
         }
 
-        if (changed) {
+        // Smooth zoom with RAF
+        if (activeKeys.current.has('+') || activeKeys.current.has('=')) {
+            const currentScale = usePDFStore.getState().visualScale;
+            usePDFStore.setState({
+                visualScale: Math.min(currentScale + ZOOM_SPEED, 3),
+                fitMode: 'custom',
+            });
+            changed = true;
+        }
+        if (activeKeys.current.has('-')) {
+            const currentScale = usePDFStore.getState().visualScale;
+            usePDFStore.setState({
+                visualScale: Math.max(currentScale - ZOOM_SPEED, 0.5),
+                fitMode: 'custom',
+            });
+            changed = true;
+        }
+
+        if (changed && nextScrollTop !== listRef.current.element.scrollTop) {
             // Use scrollTo with 'instant' behavior to avoid browser interference
             listRef.current?.element?.scrollTo({
                 top: Math.round(nextScrollTop),
@@ -394,7 +413,8 @@ export default function PDFReader({ file }: PDFReaderProps) {
             if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
             if (focusMode !== 'pdf') return;
 
-            if (['j', 'k', 'd', 'u', 'ArrowDown', 'ArrowUp'].includes(e.key)) {
+            if (['j', 'k', 'd', 'u', 'ArrowDown', 'ArrowUp', '+', '=', '-'].includes(e.key)) {
+                e.preventDefault(); // Prevent default for zoom keys too
                 if (!activeKeys.current.has(e.key)) {
                     activeKeys.current.add(e.key);
                     if (!requestRef.current) {
@@ -405,7 +425,7 @@ export default function PDFReader({ file }: PDFReaderProps) {
         };
 
         const onKeyUp = (e: KeyboardEvent) => {
-            if (['j', 'k', 'd', 'u', 'ArrowDown', 'ArrowUp'].includes(e.key)) {
+            if (['j', 'k', 'd', 'u', 'ArrowDown', 'ArrowUp', '+', '=', '-'].includes(e.key)) {
                 activeKeys.current.delete(e.key);
                 if (activeKeys.current.size === 0) {
                     if (requestRef.current) {
@@ -561,17 +581,8 @@ export default function PDFReader({ file }: PDFReaderProps) {
                 return;
             }
 
-            if (e.key === '+' || e.key === '=') {
-                e.preventDefault();
-                zoomIn();
-                return;
-            }
-
-            if (e.key === '-') {
-                e.preventDefault();
-                zoomOut();
-                return;
-            }
+            // +/- zoom is now handled in the RAF animation loop above
+            // (see animateScroll function)
 
             // Global Modes (Outline focus)
             if (focusMode === 'outline' && flatOutline.length > 0) {
@@ -807,13 +818,15 @@ export default function PDFReader({ file }: PDFReaderProps) {
                                         overflow: 'hidden',
                                     }}
                                 >
-                                    {/* Transform container - scales content visually */}
+                                    {/* Transform container - GPU accelerated for smooth zoom */}
                                     <div
                                         style={{
-                                            transform: `scale(${transformRatio})`,
+                                            transform: `scale(${transformRatio}) translateZ(0)`,
                                             transformOrigin: 'top left',
                                             width: logicalWidth,
                                             height: logicalHeight,
+                                            willChange: 'transform',
+                                            backfaceVisibility: 'hidden',
                                         }}
                                     >
                                         <Document
