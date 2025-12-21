@@ -16,6 +16,8 @@ export default function VimInput() {
         setFitMode,
         setVisualScale,
         setFitRatio,
+        setModeAbsolute,
+        setModeRelative,
         setCurrentPage,
         addToHistory,
         currentPage,
@@ -63,21 +65,17 @@ export default function VimInput() {
                 } else {
                     document.exitFullscreen();
                 }
-            } else if (['p', 'page'].includes(cmd)) {
-                setFitMode('fit-page');
-            } else if (['width', 'w'].includes(cmd)) {
-                setFitMode('fit-width');
+            } else if (cmd === 'a') {
                 if (arg && !isNaN(arg)) {
-                    setFitRatio(arg / 100);
+                    setModeAbsolute(arg);
                 } else {
-                    setFitRatio(0.9);
+                    setModeAbsolute();
                 }
-            } else if (['zoom', 'z'].includes(cmd)) {
-                setFitMode('custom');
+            } else if (cmd === 'r') {
                 if (arg && !isNaN(arg)) {
-                    setVisualScale(arg / 100);
+                    setModeRelative(arg);
                 } else {
-                    setVisualScale(1.2);
+                    setModeRelative();
                 }
             } else if (['go', 'n'].includes(cmd)) {
                 if (arg && !isNaN(arg) && arg > 0) {

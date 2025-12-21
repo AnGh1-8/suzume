@@ -82,6 +82,13 @@ export default function PDFReader({ file }: PDFReaderProps) {
         goForwardInHistory,
         helpOpen,
         toggleHelp,
+        rotation,
+        setRenderScale,
+        setModeAbsolute,
+        setModeRelative,
+        toggleMode,
+        setBaseWidth: setBaseWidthStore,
+        setAvailableWidth: setAvailableWidthStore,
     } = usePDFStore();
 
     const listRef = useRef<any>(null);
@@ -185,63 +192,45 @@ export default function PDFReader({ file }: PDFReaderProps) {
     const [baseWidth, setBaseWidth] = useState(0);
     const [baseHeight, setBaseHeight] = useState(800);
 
-    // --- Dynamic Scaling Logic ---
+    const availableWidth = sidebarOpen ? windowWidth - 320 : windowWidth;
+
+    // Synchronize dimensions to store for VimInput conversion logic
+    useLayoutEffect(() => {
+        if (baseWidth) setBaseWidthStore(baseWidth);
+    }, [baseWidth, setBaseWidthStore]);
+
+    useLayoutEffect(() => {
+        setAvailableWidthStore(availableWidth);
+    }, [availableWidth, setAvailableWidthStore]);
+
+    // Load page dimensions on change
     useEffect(() => {
         if (!pdfDocument || !numPages) return;
-
-        const calculateScale = async () => {
+        const loadPageDims = async () => {
             try {
-                // Safety check: ensure currentPage is within bounds of the current document
                 if (currentPage > pdfDocument.numPages) return;
-
                 const page = await pdfDocument.getPage(currentPage);
                 const viewport = page.getViewport({ scale: 1 });
-                const { width: pageWidth, height: pageHeight } = viewport;
-                // Cache dimensions for sync calculation
-                if (pageWidth !== baseWidth) setBaseWidth(pageWidth);
-                if (pageHeight !== baseHeight) setBaseHeight(pageHeight);
-
-                const { width: windowWidth, height: windowHeight } = windowScale; // Use react-use window size
-
-                // In fit-width/fit-page modes, subtract sidebar width if open
-                // In custom mode, sidebar is overlay and doesn't affect PDF layout
-                const availableWidth =
-                    fitMode !== 'custom' && sidebarOpen ? windowWidth - 320 : windowWidth;
-
-                let newScale = visualScale;
-
-                if (fitMode === 'fit-width') {
-                    // Use fitRatio (default 0.9)
-                    newScale = (availableWidth * fitRatio) / pageWidth;
-                } else if (fitMode === 'fit-page') {
-                    // Fit entirely within window (max of width/height fits min of window dimensions)
-                    const widthScale = availableWidth / pageWidth;
-                    const heightScale = windowHeight / pageHeight;
-                    newScale = Math.min(widthScale, heightScale) * 0.95; // 0.95 padding
-                }
-
-                if (newScale !== visualScale) {
-                    setVisualScale(newScale);
-                }
+                if (viewport.width !== baseWidth) setBaseWidth(viewport.width);
+                if (viewport.height !== baseHeight) setBaseHeight(viewport.height);
             } catch (err) {
-                console.error('Scale calculation error:', err);
+                console.error('Dim load error:', err);
             }
         };
+        loadPageDims();
+    }, [currentPage, pdfDocument, numPages, baseWidth, baseHeight]);
 
-        // Run scale calculation
-        calculateScale();
-        // Re-calculate on resize, sidebar toggle, or fit mode change
-    }, [
-        fitMode,
-        fitRatio,
-        windowScale,
-        sidebarOpen,
-        currentPage,
-        pdfDocument,
-        numPages,
-        visualScale,
-        setVisualScale,
-    ]);
+    /**
+     * DERIVE TRANSFORM RATIO:
+     */
+    const transformRatio = useMemo(() => {
+        if (!baseWidth || !baseHeight) return visualScale / renderScale;
+        let scale = visualScale;
+        if (fitMode === 'relative') {
+            scale = (availableWidth * fitRatio) / baseWidth;
+        }
+        return scale / renderScale;
+    }, [fitMode, fitRatio, visualScale, renderScale, baseWidth, baseHeight, availableWidth]);
 
     // NOTE: Scroll adjustment for zoom is handled by useLayoutEffect below (lines ~650)
     // using vertical center anchor to preserve current page
@@ -259,11 +248,11 @@ export default function PDFReader({ file }: PDFReaderProps) {
     useEffect(() => {
         setIsLayoutReady(false);
         // Reset scale/mode on new file
-        setFitMode('fit-width');
+        setFitMode('relative');
         setFitRatio(0.9);
         setFocusMode('pdf'); // Ensure focus is on PDF, not outline
         // We don't setScale immediately here as dynamic calc will pick it up
-    }, [file]);
+    }, [file, setFitMode, setFitRatio, setFocusMode]);
 
     async function onDocumentLoadSuccess(pdf: any) {
         setPdfDocument(pdf);
@@ -432,21 +421,31 @@ export default function PDFReader({ file }: PDFReaderProps) {
             changed = true;
         }
 
-        // Smooth zoom with RAF
+        // Mode-specific smooth zoom
         if (activeKeys.current.has('+') || activeKeys.current.has('=')) {
-            const currentScale = usePDFStore.getState().visualScale;
-            usePDFStore.setState({
-                visualScale: Math.min(currentScale + ZOOM_SPEED, 3),
-                fitMode: 'custom',
-            });
+            const state = usePDFStore.getState();
+            if (state.fitMode === 'relative') {
+                usePDFStore.setState({
+                    fitRatio: Math.min(state.fitRatio + 0.01, 2.0),
+                });
+            } else {
+                usePDFStore.setState({
+                    visualScale: Math.min(state.visualScale + ZOOM_SPEED, 3.0),
+                });
+            }
             changed = true;
         }
         if (activeKeys.current.has('-')) {
-            const currentScale = usePDFStore.getState().visualScale;
-            usePDFStore.setState({
-                visualScale: Math.max(currentScale - ZOOM_SPEED, 0.5),
-                fitMode: 'custom',
-            });
+            const state = usePDFStore.getState();
+            if (state.fitMode === 'relative') {
+                usePDFStore.setState({
+                    fitRatio: Math.max(state.fitRatio - 0.01, 0.1),
+                });
+            } else {
+                usePDFStore.setState({
+                    visualScale: Math.max(state.visualScale - ZOOM_SPEED, 0.1),
+                });
+            }
             changed = true;
         }
 
@@ -636,6 +635,13 @@ export default function PDFReader({ file }: PDFReaderProps) {
                 return;
             }
 
+            // Toggle Mode (Absolute/Relative)
+            if (e.key === 'a') {
+                e.preventDefault();
+                toggleMode();
+                return;
+            }
+
             // +/- zoom is now handled in the RAF animation loop above
             // (see animateScroll function)
 
@@ -701,35 +707,18 @@ export default function PDFReader({ file }: PDFReaderProps) {
             helpOpen,
             toggleHelp,
             sidebarOpen,
+            toggleSidebar,
+            addToHistory,
+            setCurrentPage,
+            setPendingCommand,
+            setSelectedPath,
+            toggleOutlineExpand,
+            jumpToDestination,
         ]
     );
 
     // itemHeight uses FIXED renderScale - layout never changes during zoom
     const itemHeight = baseHeight * renderScale + 24;
-
-    // CSS transform ratio for visual zoom
-    // Calculate REAL-TIME visual scale for rendering synchronous with layout
-    const currentVisualScale = useMemo(() => {
-        if (fitMode === 'custom' || !baseWidth || !baseHeight) {
-            return visualScale;
-        }
-
-        const { width: windowWidth, height: windowHeight } = windowScale;
-        const availableWidth = sidebarOpen ? windowWidth - 320 : windowWidth;
-
-        if (fitMode === 'fit-width') {
-            return (availableWidth * fitRatio) / baseWidth;
-        } else if (fitMode === 'fit-page') {
-            const widthScale = availableWidth / baseWidth;
-            const heightScale = windowHeight / baseHeight;
-            return Math.min(widthScale, heightScale) * 0.95;
-        }
-
-        return visualScale;
-    }, [fitMode, fitRatio, windowScale, sidebarOpen, baseWidth, baseHeight, visualScale]);
-
-    // CSS transform ratio for visual zoom
-    const transformRatio = currentVisualScale / renderScale;
 
     // Breadcrumb: filename > current heading path based on currentPage
     const breadcrumb = useMemo(() => {
@@ -879,40 +868,37 @@ export default function PDFReader({ file }: PDFReaderProps) {
                             </span>
                         )}
                     </div>
-                    {/* Right side: Useful info - Fixed Background to cover potential overlap */}
+                    {/* Right side: Info */}
                     <div
                         className={clsx(
                             'flex items-center space-x-3 text-xs z-10 pl-4 relative',
                             theme === 'dark' ? 'bg-[#222]' : 'bg-white'
                         )}
                     >
-                        {/* Page number */}
-                        <span
-                            className={clsx(
-                                'px-2 py-0.5 rounded font-mono',
-                                theme === 'dark' ? 'bg-[#333]' : 'bg-gray-100 text-gray-600'
-                            )}
-                        >
-                            {currentPage}/{numPages || '-'}
-                        </span>
-                        {/* Zoom percentage */}
-                        <span
-                            className={clsx(
-                                'px-2 py-0.5 rounded font-mono',
-                                theme === 'dark' ? 'bg-[#333]' : 'bg-gray-100 text-gray-600'
-                            )}
-                        >
-                            {Math.round(visualScale * 100)}%
-                        </span>
-                        {/* Fit mode indicator - always visible */}
-                        <span
-                            className={clsx(
-                                'px-2 py-0.5 rounded font-mono',
-                                theme === 'dark' ? 'bg-[#333]' : 'bg-gray-100 text-gray-600'
-                            )}
-                        >
-                            {fitMode === 'custom' ? 'Z' : fitMode === 'fit-width' ? 'W' : 'P'}
-                        </span>
+                        {/* Status indicators */}
+                        <div className="flex items-center space-x-1 font-mono">
+                            <span
+                                className={clsx(
+                                    'px-2 py-0.5 rounded',
+                                    theme === 'dark' ? 'bg-[#333]' : 'bg-gray-100 text-gray-600'
+                                )}
+                            >
+                                {fitMode === 'absolute' ? 'A' : 'R'}{' '}
+                                {Math.round(
+                                    (fitMode === 'absolute' ? visualScale : fitRatio) * 100
+                                )}
+                                %
+                            </span>
+                            <span
+                                className={clsx(
+                                    'px-2 py-0.5 rounded',
+                                    theme === 'dark' ? 'bg-[#333]' : 'bg-gray-100 text-gray-600'
+                                )}
+                            >
+                                {currentPage}/{numPages || '-'}
+                            </span>
+                        </div>
+
                         {/* Help hint */}
                         <button
                             onClick={toggleHelp}
@@ -981,25 +967,14 @@ export default function PDFReader({ file }: PDFReaderProps) {
                             // is large enough to cover the screen even at the SMALLER of the two scale states.
 
                             // 1. Calculate ratios for both states
-                            const fitWidthRatio = fitMode === 'fit-width';
-                            const fitPageRatio = fitMode === 'fit-page';
 
                             const getRatio = (isSidebarOpen: boolean) => {
-                                if (fitMode === 'custom' || !baseWidth || !baseHeight)
+                                if (fitMode === 'absolute' || !baseWidth || !baseHeight)
                                     return visualScale / renderScale;
-                                const availableWidth = isSidebarOpen
+                                const currentAvailableWidth = isSidebarOpen
                                     ? windowWidth - 320
                                     : windowWidth;
-                                let scale = visualScale;
-                                if (fitWidthRatio) scale = (availableWidth * fitRatio) / baseWidth;
-                                else if (fitPageRatio) {
-                                    scale =
-                                        Math.min(
-                                            availableWidth / baseWidth,
-                                            windowHeight / baseHeight
-                                        ) * 0.95;
-                                }
-                                return scale / renderScale;
+                                return (currentAvailableWidth * fitRatio) / baseWidth / renderScale;
                             };
 
                             const ratioOpen = getRatio(true);

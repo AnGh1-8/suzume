@@ -5,7 +5,16 @@ import { usePDFStore } from '@/store/usePDFStore';
 import clsx from 'clsx';
 
 export default function HelpModal() {
-    const { helpOpen, toggleHelp, theme } = usePDFStore();
+    const {
+        helpOpen,
+        toggleHelp,
+        theme,
+        setModeAbsolute,
+        setModeRelative,
+        toggleMode,
+        setBaseWidth: setBaseWidthStore,
+        setAvailableWidth: setAvailableWidthStore,
+    } = usePDFStore();
 
     if (!helpOpen) return null;
 
@@ -24,14 +33,14 @@ export default function HelpModal() {
             ],
         },
         {
-            title: 'View Control',
+            title: 'Display Modes',
             icon: <Layout size={16} />,
             items: [
-                { key: ':w [num]', desc: 'Fit Width (e.g. :w 80)' },
-                { key: ':z [num]', desc: 'Zoom % (e.g. :z 150)' },
-                { key: ':fit', desc: 'Fit Whole Page' },
+                { key: ':a [num]', desc: 'Absolute Mode (val: %)' },
+                { key: ':r [num]', desc: 'Relative Mode (val: % width)' },
+                { key: 'a', desc: 'Toggle A/R Mode' },
                 { key: ':fs', desc: 'Fullscreen Toggle' },
-                { key: '+ / -', desc: 'Quick Zoom' },
+                { key: '+ / -', desc: 'Zoom (in-mode)' },
             ],
         },
         {
@@ -182,18 +191,18 @@ export default function HelpModal() {
                                 theme === 'dark' ? 'text-blue-400' : 'text-blue-600'
                             )}
                         >
-                            :w 80
+                            :r 80
                         </span>{' '}
-                        to set width to 80%, or{' '}
+                        to set relative width to 80%, or{' '}
                         <span
                             className={clsx(
                                 'font-mono',
                                 theme === 'dark' ? 'text-blue-400' : 'text-blue-600'
                             )}
                         >
-                            :z 150
+                            :a 150
                         </span>{' '}
-                        for 150% zoom.
+                        for 150% absolute zoom.
                     </p>
                 </div>
             </div>

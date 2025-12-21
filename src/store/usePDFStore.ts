@@ -16,13 +16,15 @@ interface PDFState {
     helpOpen: boolean;
     pendingCommand: null | 'z' | 'g';
     theme: 'light' | 'dark';
-    fitMode: 'custom' | 'fit-width' | 'fit-page';
-    fitRatio: number; // For fit-width (0.9 default)
+    fitMode: 'absolute' | 'relative';
+    fitRatio: number; // For relative mode (e.g. 0.9 for 90%)
     jumpHistory: number[];
     historyIndex: number;
     recentFiles: File[];
     recentFileNames: string[]; // For persistence
     finderOpen: boolean;
+    baseWidth: number; // PDF page width at scale 1
+    availableWidth: number; // Viewport width minus sidebar (if applicable)
 
     setFile: (file: File | string | null) => void;
     setNumPages: (num: number) => void;
@@ -39,8 +41,14 @@ interface PDFState {
     setPendingCommand: (cmd: null | 'z' | 'g') => void;
     toggleHelp: () => void;
     setTheme: (theme: 'light' | 'dark') => void;
-    setFitMode: (mode: 'custom' | 'fit-width' | 'fit-page') => void;
+    setFitMode: (mode: 'absolute' | 'relative') => void;
     setFitRatio: (ratio: number) => void;
+    toggleMode: () => void;
+
+    setBaseWidth: (width: number) => void;
+    setAvailableWidth: (width: number) => void;
+    setModeAbsolute: (val?: number) => void;
+    setModeRelative: (val?: number) => void;
 
     // History Actions
     addToHistory: (page: number) => void;
@@ -76,13 +84,15 @@ export const usePDFStore = create<PDFState>()(
             helpOpen: false,
             pendingCommand: null,
             theme: 'dark',
-            fitMode: 'fit-width',
+            fitMode: 'relative',
             fitRatio: 0.9,
             jumpHistory: [],
             historyIndex: -1,
             recentFiles: [],
             recentFileNames: [],
             finderOpen: false,
+            baseWidth: 600,
+            availableWidth: 1000,
 
             setFile: (file) =>
                 set((state) => {
@@ -215,13 +225,49 @@ export const usePDFStore = create<PDFState>()(
             zoomIn: () =>
                 set((state) => ({
                     visualScale: Math.min(state.visualScale + 0.05, 3),
-                    fitMode: 'custom',
+                    fitMode: 'absolute',
                 })),
             zoomOut: () =>
                 set((state) => ({
                     visualScale: Math.max(state.visualScale - 0.05, 0.5),
-                    fitMode: 'custom',
+                    fitMode: 'absolute',
                 })),
+
+            toggleMode: () => {
+                const { fitMode } = get();
+                if (fitMode === 'relative') {
+                    get().setModeAbsolute();
+                } else {
+                    get().setModeRelative();
+                }
+            },
+
+            setBaseWidth: (width: number) => set({ baseWidth: width }),
+            setAvailableWidth: (availableWidth: number) => set({ availableWidth }),
+
+            setModeAbsolute: (val?: number) =>
+                set((state) => {
+                    if (val !== undefined) {
+                        return { fitMode: 'absolute', visualScale: val / 100 };
+                    }
+                    // Conversion: Keep visual size same
+                    // scale = (availableWidth * ratio) / baseWidth
+                    const currentScale =
+                        (state.availableWidth * state.fitRatio) / (state.baseWidth || 1);
+                    return { fitMode: 'absolute', visualScale: currentScale };
+                }),
+
+            setModeRelative: (val?: number) =>
+                set((state) => {
+                    if (val !== undefined) {
+                        return { fitMode: 'relative', fitRatio: val / 100 };
+                    }
+                    // Conversion: Keep visual size same
+                    // ratio = (visualScale * baseWidth) / availableWidth
+                    const currentRatio =
+                        (state.visualScale * (state.baseWidth || 1)) / (state.availableWidth || 1);
+                    return { fitMode: 'relative', fitRatio: currentRatio };
+                }),
         }),
         {
             name: 'suzume-storage',
