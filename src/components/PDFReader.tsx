@@ -217,6 +217,9 @@ export default function PDFReader({ file }: PDFReaderProps) {
                 targetScrollTopRef.current = targetScroll;
                 // Explicitly sync after jump completes
                 updateProgress(targetPage, targetScroll);
+                // Return focus to PDF viewer after jump
+                setFocusMode('pdf');
+                window.focus();
             }
         } catch (e) {
             console.error('Jump error', e);
