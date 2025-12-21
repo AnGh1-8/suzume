@@ -1,29 +1,44 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useLayoutEffect } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 // @ts-ignore
 import { List } from 'react-window';
 import AutoSizer from 'react-virtualized-auto-sizer';
 
-const Row = ({ index, style, scale }: any) => (
-    <div style={{ ...style, display: 'flex', justifyContent: 'center', padding: '2px' }}>
-        <div className="shadow-2xl relative">
-            <Page
-                pageNumber={index + 1}
-                scale={scale}
-                renderTextLayer={true}
-                renderAnnotationLayer={true}
-                loading={<div className="w-[600px] h-[800px] bg-[#222] animate-pulse rounded" />}
-                onRenderSuccess={() => {
-                    /* update loaded pages? */
-                }}
-            />
+import React, { memo } from 'react';
+
+const Row = memo(({ index, style, renderScale, theme }: any) => {
+    return (
+        <div
+            style={{
+                ...style,
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'flex-start',
+                padding: '12px 0',
+            }}
+        >
+            <div
+                className={clsx(
+                    'shadow-2xl relative',
+                    theme === 'dark' ? 'bg-[#1a1a1a]' : 'bg-white'
+                )}
+            >
+                <Page
+                    pageNumber={index + 1}
+                    scale={renderScale} // Fixed render scale - never changes
+                    renderTextLayer={true}
+                    renderAnnotationLayer={true}
+                />
+            </div>
         </div>
-    </div>
-);
+    );
+});
+Row.displayName = 'PDFRow';
+
 import { usePDFStore } from '@/store/usePDFStore';
-import { useWindowSize, useKey } from 'react-use';
+import { useWindowSize, useKey, useDebounce } from 'react-use';
 import {
     ChevronRight,
     ChevronDown,
@@ -48,7 +63,8 @@ interface PDFReaderProps {
 
 export default function PDFReader({ file }: PDFReaderProps) {
     const {
-        scale,
+        renderScale,
+        visualScale,
         currentPage,
         numPages,
         sidebarOpen,
@@ -71,7 +87,7 @@ export default function PDFReader({ file }: PDFReaderProps) {
         fitRatio,
         setFitMode,
         setFitRatio,
-        setScale,
+        setVisualScale,
         addToHistory,
         goBackInHistory,
         goForwardInHistory,
@@ -175,7 +191,7 @@ export default function PDFReader({ file }: PDFReaderProps) {
                 // Subtract sidebar width if open (approx 320px)
                 const availableWidth = sidebarOpen ? windowWidth - 320 : windowWidth;
 
-                let newScale = scale;
+                let newScale = visualScale;
 
                 if (fitMode === 'fit-width') {
                     // Use fitRatio (default 0.9)
@@ -187,8 +203,8 @@ export default function PDFReader({ file }: PDFReaderProps) {
                     newScale = Math.min(widthScale, heightScale) * 0.95; // 0.95 padding
                 }
 
-                if (newScale !== scale) {
-                    setScale(newScale);
+                if (newScale !== visualScale) {
+                    setVisualScale(newScale);
                 }
             } catch (err) {
                 console.error('Scale calculation error:', err);
@@ -197,21 +213,20 @@ export default function PDFReader({ file }: PDFReaderProps) {
 
         calculateScale();
         // Re-calculate on resize (windowScale changes) or sidebar toggle
-    }, [fitMode, fitRatio, windowScale, sidebarOpen, currentPage, pdfDocument, numPages]);
+    }, [
+        fitMode,
+        fitRatio,
+        windowScale,
+        sidebarOpen,
+        currentPage,
+        pdfDocument,
+        numPages,
+        visualScale,
+        setVisualScale,
+    ]);
 
-    // --- Key Handling ---
-    const prevScale = useRef(scale);
-    useEffect(() => {
-        if (listRef.current?.element && prevScale.current !== scale) {
-            const ratio = scale / prevScale.current;
-            const currentScroll = listRef.current.element.scrollTop;
-            listRef.current.element.scrollTo({
-                top: Math.round(currentScroll * ratio),
-                behavior: 'instant',
-            });
-            prevScale.current = scale;
-        }
-    }, [scale]);
+    // NOTE: Scroll adjustment for zoom is handled by useLayoutEffect below (lines ~650)
+    // using vertical center anchor to preserve current page
 
     // Keyboard Handling
     // const [pendingCommand, setPendingCommand] = useState<null | 'z' | 'g'>(null); // Moved to global store
@@ -259,7 +274,7 @@ export default function PDFReader({ file }: PDFReaderProps) {
 
     // Shared Page Update Logic
     // Use refs to access latest state inside stale closures (useEffect/animateScroll/requestAnimationFrame)
-    const scaleRef = useRef(scale);
+    const scaleRef = useRef(renderScale); // Use renderScale since scroll is in logical space
     const currentPageRef = useRef(currentPage);
     const baseHeightRef = useRef(baseHeight);
 
@@ -268,8 +283,8 @@ export default function PDFReader({ file }: PDFReaderProps) {
     const isInternalPageUpdate = useRef(false);
 
     useEffect(() => {
-        scaleRef.current = scale;
-    }, [scale]);
+        scaleRef.current = renderScale; // Use renderScale since scroll is in logical space
+    }, [renderScale]);
     useEffect(() => {
         currentPageRef.current = currentPage;
     }, [currentPage]);
@@ -279,7 +294,7 @@ export default function PDFReader({ file }: PDFReaderProps) {
 
     // Sync Scroll to Page Change (e.g. from Command :10)
     useEffect(() => {
-        if (!listRef.current?.element || !numPages) return;
+        if (!listRef.current || !numPages) return;
 
         // If the change came from scrolling, don't snap the scroll position
         if (isInternalPageUpdate.current) {
@@ -287,27 +302,24 @@ export default function PDFReader({ file }: PDFReaderProps) {
             return;
         }
 
-        // Calculate where we should be for this page
-        const targetPage = currentPage;
-        const itemHeight = baseHeightRef.current * scaleRef.current + 4;
-        const targetScrollTop = (targetPage - 1) * itemHeight;
-
-        // Snap to the new page
-        listRef.current?.element?.scrollTo({
-            top: Math.round(targetScrollTop),
+        // Use the imperative API to ensure perfect alignment with virtual rows
+        listRef.current.scrollToRow({
+            index: currentPage - 1,
+            align: 'start',
             behavior: 'instant',
         });
     }, [currentPage, numPages]);
 
     const updatePageFromScroll = useCallback(
         (scrollTop: number) => {
-            const currentItemHeight = baseHeightRef.current * scaleRef.current + 4; // 4px gap
+            // Scroll coordinates are in logical space (renderScale)
+            const currentItemHeight = baseHeightRef.current * scaleRef.current + 24; // 24px gap
             if (currentItemHeight <= 0 || !listRef.current?.element) return;
 
-            // Get the actual height of the scroll container to find the center
+            // viewportHeight in logical space
             const viewportHeight = listRef.current.element.clientHeight;
 
-            // Detection point is the vertical center of the screen
+            // Detection point is the vertical center
             const detectionPoint = scrollTop + viewportHeight / 2;
 
             let newPage = Math.floor(detectionPoint / currentItemHeight) + 1;
@@ -324,9 +336,6 @@ export default function PDFReader({ file }: PDFReaderProps) {
         },
         [numPages, setCurrentPage]
     );
-
-    // We still need itemHeight for the List prop
-    const itemHeight = baseHeight * scale + 4;
 
     const onScroll = useCallback(
         (props: any) => {
@@ -464,26 +473,18 @@ export default function PDFReader({ file }: PDFReaderProps) {
                 // Handle 'z' mode
                 if (pendingCommand === 'z') {
                     if (['z', 't', 'b'].includes(e.key)) {
-                        if (!listRef.current?.element) return;
-                        const vHeight = listRef.current.element.clientHeight;
-                        // Use refs for accuracy
-                        const pStart =
-                            (currentPageRef.current - 1) *
-                            (baseHeightRef.current * scaleRef.current + 4);
-                        const currentItemHeight = baseHeightRef.current * scaleRef.current + 4;
+                        if (!listRef.current) return;
 
-                        let targetTop = pStart;
-                        if (e.key === 'z')
-                            targetTop = pStart - (vHeight - currentItemHeight) / 2; // zz
-                        else if (e.key === 't')
-                            targetTop = pStart; // zt
-                        else if (e.key === 'b') targetTop = pStart - (vHeight - currentItemHeight); // zb
+                        let align: 'center' | 'start' | 'end' = 'center';
+                        if (e.key === 't') align = 'start';
+                        else if (e.key === 'b') align = 'end';
 
-                        listRef.current?.element?.scrollTo({
-                            top: Math.round(targetTop),
+                        listRef.current.scrollToRow({
+                            index: currentPageRef.current - 1,
+                            align,
                             behavior: 'instant',
                         });
-                        updatePageFromScroll(targetTop);
+
                         setPendingCommand(null);
                     }
                     // Any other key: check if modifier. Use whitelist approach or blacklist.
@@ -637,6 +638,12 @@ export default function PDFReader({ file }: PDFReaderProps) {
         ]
     );
 
+    // itemHeight uses FIXED renderScale - layout never changes during zoom
+    const itemHeight = baseHeight * renderScale + 24;
+
+    // CSS transform ratio for visual zoom
+    const transformRatio = visualScale / renderScale;
+
     return (
         <div
             className={clsx(
@@ -645,10 +652,10 @@ export default function PDFReader({ file }: PDFReaderProps) {
                 isLayoutReady ? 'opacity-100' : 'opacity-0'
             )}
         >
-            {/* Sidebar - Always in DOM but width animates */}
+            {/* Sidebar - Instant toggle */}
             <aside
                 className={clsx(
-                    'flex flex-col transition-all duration-300 overflow-hidden',
+                    'flex flex-col overflow-hidden',
                     theme === 'dark' ? 'bg-[#1a1a1a]' : 'bg-white',
                     sidebarOpen
                         ? `w-80 border-r ${theme === 'dark' ? 'border-[#333]' : 'border-gray-200 shadow-sm'}`
@@ -706,6 +713,7 @@ export default function PDFReader({ file }: PDFReaderProps) {
                 </div>
             </aside>
 
+            {/* Main Content */}
             <div
                 className="flex-1 flex flex-col h-full relative"
                 onClick={() => setFocusMode('pdf')}
@@ -761,7 +769,9 @@ export default function PDFReader({ file }: PDFReaderProps) {
                         >
                             <ZoomOut size={18} />
                         </button>
-                        <span className="text-xs w-12 text-center">{Math.round(scale * 100)}%</span>
+                        <span className="text-xs w-12 text-center">
+                            {Math.round(visualScale * 100)}%
+                        </span>
                         <button
                             onClick={zoomIn}
                             className={clsx(
@@ -776,39 +786,64 @@ export default function PDFReader({ file }: PDFReaderProps) {
                     </div>
                 </header>
 
-                {/* PDF View */}
+                {/* PDF View - Container applies CSS transform for zoom */}
                 <div
                     className={clsx(
-                        'flex-1 relative transition-colors duration-300',
+                        'flex-1 relative transition-colors duration-300 overflow-hidden',
                         theme === 'dark' ? 'bg-[#111]' : 'bg-[#f3f4f6]'
                     )}
                 >
                     <AutoSizer>
-                        {({ height, width }) => (
-                            <div style={{ height, width }}>
-                                <Document
-                                    file={file}
-                                    onLoadSuccess={onDocumentLoadSuccess}
-                                    loading={
-                                        <div className="p-10 text-center text-gray-500">
-                                            Loading Document...
-                                        </div>
-                                    }
-                                    className="flex flex-col items-center"
+                        {({ height, width }) => {
+                            // Logical dimensions for List (before transform)
+                            const logicalHeight = height / transformRatio;
+                            const logicalWidth = width / transformRatio;
+
+                            return (
+                                <div
+                                    style={{
+                                        height,
+                                        width,
+                                        overflow: 'hidden',
+                                    }}
                                 >
-                                    <List
-                                        listRef={listRef}
-                                        style={{ height, width }}
-                                        rowCount={numPages || 0}
-                                        rowHeight={itemHeight}
-                                        className="scrollbar-hide outline-none"
-                                        rowComponent={Row}
-                                        rowProps={{ scale }}
-                                        onScroll={onScroll}
-                                    />
-                                </Document>
-                            </div>
-                        )}
+                                    {/* Transform container - scales content visually */}
+                                    <div
+                                        style={{
+                                            transform: `scale(${transformRatio})`,
+                                            transformOrigin: 'top left',
+                                            width: logicalWidth,
+                                            height: logicalHeight,
+                                        }}
+                                    >
+                                        <Document
+                                            file={file}
+                                            onLoadSuccess={onDocumentLoadSuccess}
+                                            loading={
+                                                <div className="p-10 text-center text-gray-500">
+                                                    Loading Document...
+                                                </div>
+                                            }
+                                            className="flex flex-col items-center"
+                                        >
+                                            <List
+                                                listRef={listRef}
+                                                style={{
+                                                    height: logicalHeight,
+                                                    width: logicalWidth,
+                                                }}
+                                                rowCount={numPages || 0}
+                                                rowHeight={itemHeight}
+                                                className="scrollbar-hide outline-none"
+                                                rowComponent={Row as any}
+                                                rowProps={{ renderScale, theme }}
+                                                onScroll={onScroll}
+                                            />
+                                        </Document>
+                                    </div>
+                                </div>
+                            );
+                        }}
                     </AutoSizer>
                 </div>
             </div>

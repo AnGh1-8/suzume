@@ -14,7 +14,7 @@ export default function VimInput() {
         setTheme,
         theme,
         setFitMode,
-        setScale,
+        setVisualScale,
         setFitRatio,
         setCurrentPage,
         addToHistory,
@@ -75,9 +75,9 @@ export default function VimInput() {
             } else if (['zoom', 'z'].includes(cmd)) {
                 setFitMode('custom');
                 if (arg && !isNaN(arg)) {
-                    setScale(arg / 100);
+                    setVisualScale(arg / 100);
                 } else {
-                    setScale(1.2);
+                    setVisualScale(1.2);
                 }
             } else if (['go', 'page', 'p', 'n'].includes(cmd)) {
                 if (arg && !isNaN(arg) && arg > 0) {

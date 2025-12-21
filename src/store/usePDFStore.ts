@@ -6,7 +6,8 @@ interface PDFState {
     file: File | string | null;
     numPages: number | null;
     currentPage: number;
-    scale: number;
+    renderScale: number; // Fixed scale for PDF canvas rendering (higher = sharper but more memory)
+    visualScale: number; // CSS transform scale for instant zoom (no re-render)
     rotation: number;
     sidebarOpen: boolean;
     focusMode: 'pdf' | 'outline';
@@ -26,7 +27,8 @@ interface PDFState {
     setFile: (file: File | string | null) => void;
     setNumPages: (num: number) => void;
     setCurrentPage: (page: number) => void;
-    setScale: (scale: number) => void;
+    setRenderScale: (scale: number) => void;
+    setVisualScale: (scale: number) => void;
     setRotation: (rotation: number) => void;
     toggleSidebar: () => void;
     setSidebarOpen: (isOpen: boolean) => void; // Explicit setter
@@ -51,7 +53,7 @@ interface PDFState {
     setFinderOpen: (open: boolean) => void;
     hydrateRecentFiles: () => Promise<void>;
 
-    // Actions for zoom
+    // Actions for zoom (modify visualScale only, no re-render)
     zoomIn: () => void;
     zoomOut: () => void;
 }
@@ -62,7 +64,8 @@ export const usePDFStore = create<PDFState>()(
             file: null,
             numPages: null,
             currentPage: 1,
-            scale: 1.2,
+            renderScale: 1.5, // Fixed: render at 1.5x for good quality
+            visualScale: 1.2, // CSS transform scale (user-adjustable)
             rotation: 0,
             sidebarOpen: true,
             focusMode: 'pdf', // 'pdf' | 'outline'
@@ -91,7 +94,8 @@ export const usePDFStore = create<PDFState>()(
                 }),
             setNumPages: (numPages) => set({ numPages }),
             setCurrentPage: (currentPage) => set({ currentPage }),
-            setScale: (scale) => set({ scale }),
+            setRenderScale: (renderScale: number) => set({ renderScale }),
+            setVisualScale: (visualScale: number) => set({ visualScale }),
             setRotation: (rotation) => set({ rotation }),
             toggleSidebar: () =>
                 set((state) => {
@@ -209,9 +213,15 @@ export const usePDFStore = create<PDFState>()(
             toggleHelp: () => set((state) => ({ helpOpen: !state.helpOpen })),
 
             zoomIn: () =>
-                set((state) => ({ scale: Math.min(state.scale + 0.1, 3), fitMode: 'custom' })),
+                set((state) => ({
+                    visualScale: Math.min(state.visualScale + 0.1, 3),
+                    fitMode: 'custom',
+                })),
             zoomOut: () =>
-                set((state) => ({ scale: Math.max(state.scale - 0.1, 0.5), fitMode: 'custom' })),
+                set((state) => ({
+                    visualScale: Math.max(state.visualScale - 0.1, 0.5),
+                    fitMode: 'custom',
+                })),
         }),
         {
             name: 'suzume-storage',
