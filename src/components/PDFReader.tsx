@@ -88,7 +88,9 @@ export default function PDFReader({ file }: PDFReaderProps) {
         setModeRelative,
         toggleMode,
         setBaseWidth: setBaseWidthStore,
+        setBaseHeight: setBaseHeightStore,
         setAvailableWidth: setAvailableWidthStore,
+        setAvailableHeight: setAvailableHeightStore,
     } = usePDFStore();
 
     const listRef = useRef<any>(null);
@@ -200,8 +202,16 @@ export default function PDFReader({ file }: PDFReaderProps) {
     }, [baseWidth, setBaseWidthStore]);
 
     useLayoutEffect(() => {
+        if (baseHeight) setBaseHeightStore(baseHeight);
+    }, [baseHeight, setBaseHeightStore]);
+
+    useLayoutEffect(() => {
         setAvailableWidthStore(availableWidth);
     }, [availableWidth, setAvailableWidthStore]);
+
+    useLayoutEffect(() => {
+        setAvailableHeightStore(windowHeight - 48); // Subtract header height for precise :fp
+    }, [windowHeight, setAvailableHeightStore]);
 
     // Load page dimensions on change
     useEffect(() => {

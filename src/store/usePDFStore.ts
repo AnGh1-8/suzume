@@ -24,7 +24,9 @@ interface PDFState {
     recentFileNames: string[]; // For persistence
     finderOpen: boolean;
     baseWidth: number; // PDF page width at scale 1
+    baseHeight: number; // PDF page height at scale 1
     availableWidth: number; // Viewport width minus sidebar (if applicable)
+    availableHeight: number; // Viewport height minus header (if applicable)
 
     setFile: (file: File | string | null) => void;
     setNumPages: (num: number) => void;
@@ -46,7 +48,9 @@ interface PDFState {
     toggleMode: () => void;
 
     setBaseWidth: (width: number) => void;
+    setBaseHeight: (height: number) => void;
     setAvailableWidth: (width: number) => void;
+    setAvailableHeight: (height: number) => void;
     setModeAbsolute: (val?: number) => void;
     setModeRelative: (val?: number) => void;
 
@@ -92,7 +96,9 @@ export const usePDFStore = create<PDFState>()(
             recentFileNames: [],
             finderOpen: false,
             baseWidth: 600,
+            baseHeight: 800,
             availableWidth: 1000,
+            availableHeight: 800,
 
             setFile: (file) =>
                 set((state) => {
@@ -243,7 +249,9 @@ export const usePDFStore = create<PDFState>()(
             },
 
             setBaseWidth: (width: number) => set({ baseWidth: width }),
+            setBaseHeight: (height: number) => set({ baseHeight: height }),
             setAvailableWidth: (availableWidth: number) => set({ availableWidth }),
+            setAvailableHeight: (availableHeight: number) => set({ availableHeight }),
 
             setModeAbsolute: (val?: number) =>
                 set((state) => {

@@ -38,6 +38,8 @@ export default function HelpModal() {
             items: [
                 { key: ':a [num]', desc: 'Absolute Mode (val: %)' },
                 { key: ':r [num]', desc: 'Relative Mode (val: % width)' },
+                { key: ':fw', desc: 'Fit Width (100% Relative)' },
+                { key: ':fp', desc: 'Fit Page (Calculated Absolute)' },
                 { key: 'a', desc: 'Toggle A/R Mode' },
                 { key: ':fs', desc: 'Fullscreen Toggle' },
                 { key: '+ / -', desc: 'Zoom (in-mode)' },

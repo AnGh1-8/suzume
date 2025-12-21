@@ -21,6 +21,11 @@ export default function VimInput() {
         setCurrentPage,
         addToHistory,
         currentPage,
+        baseWidth,
+        baseHeight,
+        availableWidth,
+        availableHeight,
+        renderScale,
     } = usePDFStore();
 
     useEffect(() => {
@@ -76,6 +81,18 @@ export default function VimInput() {
                     setModeRelative(arg);
                 } else {
                     setModeRelative();
+                }
+            } else if (cmd === 'fw') {
+                setModeRelative(100);
+            } else if (cmd === 'fp') {
+                if (baseWidth && baseHeight && availableWidth && availableHeight) {
+                    // Fit formula: visualScale * (baseHeight + 24/renderScale) = availableHeight
+                    // The 24 comes from 12px top/bottom padding in Row component
+                    const paddingLogical = 24 / renderScale;
+                    const scaleW = (availableWidth / baseWidth) * 0.98;
+                    const scaleH = (availableHeight / (baseHeight + paddingLogical)) * 0.98;
+                    const scale = Math.min(scaleW, scaleH);
+                    setModeAbsolute(scale * 100);
                 }
             } else if (['go', 'n'].includes(cmd)) {
                 if (arg && !isNaN(arg) && arg > 0) {
