@@ -94,6 +94,7 @@ export default function PDFReader({ file }: PDFReaderProps) {
     } = usePDFStore();
 
     const listRef = useRef<any>(null);
+    const sidebarScrollRef = useRef<HTMLDivElement>(null);
     const { width: windowWidth, height: windowHeight } = useWindowSize(); // Clean usage
     const windowScale = { width: windowWidth, height: windowHeight }; // Mock obj for dependency array if needed or just use vars
 
@@ -230,6 +231,70 @@ export default function PDFReader({ file }: PDFReaderProps) {
         loadPageDims();
     }, [currentPage, pdfDocument, numPages, baseWidth, baseHeight]);
 
+    // Handle initial selection and auto-scroll for outline
+    useEffect(() => {
+        if (focusMode === 'outline' && flatOutline.length > 0 && !selectedPath) {
+            setSelectedPath(flatOutline[0].path);
+        }
+    }, [focusMode, flatOutline, selectedPath, setSelectedPath]);
+
+    // Auto-scroll selected item into view (handles navigation and expansion visibility)
+    useEffect(() => {
+        if (focusMode === 'outline' && selectedPath) {
+            // Use a small timeout to let the DOM update (important for expansion)
+            const timer = setTimeout(() => {
+                const element = document.getElementById(`outline-item-${selectedPath}`);
+                if (!element) return;
+
+                // Find the index of the selected item in the flat list
+                const currentIndex = flatOutline.findIndex((i) => i.path === selectedPath);
+                if (currentIndex === -1) return;
+
+                const currentItem = flatOutline[currentIndex];
+
+                // If expanded, we want to ensure the LAST descendant is also in view (so children are visible)
+                if (currentItem.expanded && currentItem.hasChildren) {
+                    // Find the last item that belongs to this parent (highest index with the same path prefix)
+                    let lastVisibleIndex = currentIndex;
+                    for (let i = currentIndex + 1; i < flatOutline.length; i++) {
+                        if (flatOutline[i].path.startsWith(currentItem.path)) {
+                            lastVisibleIndex = i;
+                        } else {
+                            break;
+                        }
+                    }
+
+                    if (lastVisibleIndex > currentIndex) {
+                        const lastChild = document.getElementById(
+                            `outline-item-${flatOutline[lastVisibleIndex].path}`
+                        );
+                        if (lastChild) {
+                            // Scrolling the last child with 'nearest' will push the parent up
+                            // if there isn't enough room below.
+                            lastChild.scrollIntoView({
+                                behavior: 'auto',
+                                block: 'nearest',
+                            });
+                            // Also ensure the parent is still in view (usually it will be if children fit)
+                            element.scrollIntoView({
+                                behavior: 'auto',
+                                block: 'nearest',
+                            });
+                            return;
+                        }
+                    }
+                }
+
+                // Default: just scroll the item itself
+                element.scrollIntoView({
+                    behavior: 'auto',
+                    block: 'nearest',
+                });
+            }, 10);
+            return () => clearTimeout(timer);
+        }
+    }, [selectedPath, focusMode, flatOutline]); // Re-run when flatOutline changes (expansion)
+
     /**
      * DERIVE TRANSFORM RATIO:
      */
@@ -242,26 +307,17 @@ export default function PDFReader({ file }: PDFReaderProps) {
         return scale / renderScale;
     }, [fitMode, fitRatio, visualScale, renderScale, baseWidth, baseHeight, availableWidth]);
 
-    // NOTE: Scroll adjustment for zoom is handled by useLayoutEffect below (lines ~650)
-    // using vertical center anchor to preserve current page
-
-    // Keyboard Handling
-    // const [pendingCommand, setPendingCommand] = useState<null | 'z' | 'g'>(null); // Moved to global store
     const activeKeys = useRef<Set<string>>(new Set());
     const requestRef = useRef<number | undefined>(undefined);
 
-    // Load success handler
-    // We use isLayoutReady to mask the UI until we've decided on the sidebar state to prevent flashing
     const [isLayoutReady, setIsLayoutReady] = useState(false);
 
     // Reset ready state when file changes
     useEffect(() => {
         setIsLayoutReady(false);
-        // Reset scale/mode on new file
         setFitMode('relative');
         setFitRatio(0.9);
-        setFocusMode('pdf'); // Ensure focus is on PDF, not outline
-        // We don't setScale immediately here as dynamic calc will pick it up
+        setFocusMode('pdf');
     }, [file, setFitMode, setFitRatio, setFocusMode]);
 
     async function onDocumentLoadSuccess(pdf: any) {
@@ -274,21 +330,19 @@ export default function PDFReader({ file }: PDFReaderProps) {
             const outline = await pdf.getOutline();
             setRawOutline(outline);
 
-            // Auto-close sidebar if no outline, otherwise ensure it is open
             if (!outline || outline.length === 0) {
                 setSidebarOpen(false);
             } else {
                 setSidebarOpen(true);
             }
-            // Small delay to allow layout to settle before revealing
             setTimeout(() => setIsLayoutReady(true), 50);
         } catch (e) {
             console.error('Error getting pdf metadata', e);
-            setIsLayoutReady(true); // Show anyway on error
+            setIsLayoutReady(true);
         }
     }
 
-    // Resolve page numbers for outline items (for breadcrumb based on current page)
+    // Resolve page numbers for outline items
     useEffect(() => {
         if (!pdfDocument || !outline || outline.length === 0) {
             setOutlineWithPages([]);
@@ -307,13 +361,9 @@ export default function PDFReader({ file }: PDFReaderProps) {
                     if (dest && dest[0]) {
                         pageNumber = (await pdfDocument.getPageIndex(dest[0])) + 1;
                     }
-                } catch (e) {
-                    // Ignore errors
-                }
-
+                } catch (e) {}
                 const children =
                     item.items && item.items.length > 0 ? await resolvePageNumbers(item.items) : [];
-
                 result.push({
                     title: item.title,
                     pageNumber,
@@ -326,18 +376,13 @@ export default function PDFReader({ file }: PDFReaderProps) {
         resolvePageNumbers(outline).then(setOutlineWithPages);
     }, [pdfDocument, outline]);
 
-    // Shared Page Update Logic
-    // Use refs to access latest state inside stale closures (useEffect/animateScroll/requestAnimationFrame)
-    const scaleRef = useRef(renderScale); // Use renderScale since scroll is in logical space
+    const scaleRef = useRef(renderScale);
     const currentPageRef = useRef(currentPage);
     const baseHeightRef = useRef(baseHeight);
-
-    // Flag to distinguish between page changes from scrolling (internal)
-    // vs page changes from commands (external, e.g. :10)
     const isInternalPageUpdate = useRef(false);
 
     useEffect(() => {
-        scaleRef.current = renderScale; // Use renderScale since scroll is in logical space
+        scaleRef.current = renderScale;
     }, [renderScale]);
     useEffect(() => {
         currentPageRef.current = currentPage;
@@ -346,17 +391,13 @@ export default function PDFReader({ file }: PDFReaderProps) {
         baseHeightRef.current = baseHeight;
     }, [baseHeight]);
 
-    // Sync Scroll to Page Change (e.g. from Command :10)
+    // Sync Scroll to Page Change
     useEffect(() => {
         if (!listRef.current || !numPages) return;
-
-        // If the change came from scrolling, don't snap the scroll position
         if (isInternalPageUpdate.current) {
             isInternalPageUpdate.current = false;
             return;
         }
-
-        // Use the imperative API to ensure perfect alignment with virtual rows
         listRef.current.scrollToRow({
             index: currentPage - 1,
             align: 'start',
@@ -366,23 +407,14 @@ export default function PDFReader({ file }: PDFReaderProps) {
 
     const updatePageFromScroll = useCallback(
         (scrollTop: number) => {
-            // Scroll coordinates are in logical space (renderScale)
-            const currentItemHeight = baseHeightRef.current * scaleRef.current + 24; // 24px gap
+            const currentItemHeight = baseHeightRef.current * scaleRef.current + 24;
             if (currentItemHeight <= 0 || !listRef.current?.element) return;
-
-            // viewportHeight in logical space
             const viewportHeight = listRef.current.element.clientHeight;
-
-            // Detection point is the vertical center
             const detectionPoint = scrollTop + viewportHeight / 2;
-
             let newPage = Math.floor(detectionPoint / currentItemHeight) + 1;
-
-            // Clamp to valid range
             if (numPages) {
                 newPage = Math.max(1, Math.min(newPage, numPages));
             }
-
             if (!isNaN(newPage) && newPage !== currentPageRef.current) {
                 isInternalPageUpdate.current = true;
                 setCurrentPage(newPage);
@@ -393,8 +425,6 @@ export default function PDFReader({ file }: PDFReaderProps) {
 
     const onScroll = useCallback(
         (props: any) => {
-            // Higher-level check: react-window usually passes an object with scrollOffset
-            // But we handle both just in case of different versions/event structures
             const offset = props?.scrollOffset ?? props?.target?.scrollTop ?? props?.scrollTop;
             if (typeof offset === 'number') {
                 updatePageFromScroll(offset);
@@ -408,8 +438,8 @@ export default function PDFReader({ file }: PDFReaderProps) {
         if (focusMode !== 'pdf') return;
 
         const SPEED = 15;
-        const FAST_SPEED = 60; // 4x speed for d/u
-        const ZOOM_SPEED = 0.02; // Per-frame zoom increment for smooth zooming
+        const FAST_SPEED = 60;
+        const ZOOM_SPEED = 0.02;
 
         let nextScrollTop = listRef.current.element.scrollTop;
         let changed = false;
@@ -431,13 +461,14 @@ export default function PDFReader({ file }: PDFReaderProps) {
             changed = true;
         }
 
-        // Mode-specific smooth zoom
+        if (activeKeys.current.size > 0) {
+            requestRef.current = requestAnimationFrame(animateScroll);
+        }
+
         if (activeKeys.current.has('+') || activeKeys.current.has('=')) {
             const state = usePDFStore.getState();
             if (state.fitMode === 'relative') {
-                usePDFStore.setState({
-                    fitRatio: Math.min(state.fitRatio + 0.01, 2.0),
-                });
+                usePDFStore.setState({ fitRatio: Math.min(state.fitRatio + 0.01, 2.0) });
             } else {
                 usePDFStore.setState({
                     visualScale: Math.min(state.visualScale + ZOOM_SPEED, 3.0),
@@ -448,9 +479,7 @@ export default function PDFReader({ file }: PDFReaderProps) {
         if (activeKeys.current.has('-')) {
             const state = usePDFStore.getState();
             if (state.fitMode === 'relative') {
-                usePDFStore.setState({
-                    fitRatio: Math.max(state.fitRatio - 0.01, 0.1),
-                });
+                usePDFStore.setState({ fitRatio: Math.max(state.fitRatio - 0.01, 0.1) });
             } else {
                 usePDFStore.setState({
                     visualScale: Math.max(state.visualScale - ZOOM_SPEED, 0.1),
@@ -460,25 +489,21 @@ export default function PDFReader({ file }: PDFReaderProps) {
         }
 
         if (changed && nextScrollTop !== listRef.current.element.scrollTop) {
-            // Use scrollTo with 'instant' behavior to avoid browser interference
             listRef.current?.element?.scrollTo({
                 top: Math.round(nextScrollTop),
                 behavior: 'instant',
             });
         }
-
-        if (activeKeys.current.size > 0) {
-            requestRef.current = requestAnimationFrame(animateScroll);
-        }
     };
 
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
-            if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
+            if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)
+                return;
             if (focusMode !== 'pdf') return;
 
             if (['j', 'k', 'd', 'u', 'ArrowDown', 'ArrowUp', '+', '=', '-'].includes(e.key)) {
-                e.preventDefault(); // Prevent default for zoom keys too
+                e.preventDefault();
                 if (!activeKeys.current.has(e.key)) {
                     activeKeys.current.add(e.key);
                     if (!requestRef.current) {
@@ -503,15 +528,12 @@ export default function PDFReader({ file }: PDFReaderProps) {
         window.addEventListener('keydown', onKeyDown);
         window.addEventListener('keyup', onKeyUp);
 
-        // Strict capture-phase listener to block browser Ctrl+O/I
         const handleCaptureKeyPress = (e: KeyboardEvent) => {
-            if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
-
-            // ONLY ctrl, NOT meta (Cmd), and small o/i
+            if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)
+                return;
             if (e.ctrlKey && !e.metaKey && (e.key === 'o' || e.key === 'i')) {
                 e.preventDefault();
                 e.stopPropagation();
-
                 if (e.key === 'o') {
                     const targetPage = goBackInHistory();
                     if (targetPage) {
@@ -538,69 +560,52 @@ export default function PDFReader({ file }: PDFReaderProps) {
         };
     }, [focusMode, goBackInHistory, goForwardInHistory, setCurrentPage]);
 
+    // Keyboard handling - use useKey from react-use for Normal Mode commands
     useKey(
-        (e) => true,
+        () => true, // Match all keys
         (e) => {
-            // 1. Ignore if typing in an input or textarea
-            if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
+            // Ignore if typing in an input or textarea
+            if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)
+                return;
 
-            // 2. Handle Pending State (Modal Priority)
-            if (pendingCommand) {
-                e.preventDefault();
-
-                // Cancel on Escape
-                if (e.key === 'Escape') {
+            // 1. Pending Command Handling (Multi-key sequences like gg, zz)
+            if (pendingCommand === 'g') {
+                if (e.key === 'g') {
+                    e.preventDefault();
+                    if (focusMode === 'outline' && flatOutline.length > 0) {
+                        setSelectedPath(flatOutline[0].path);
+                    } else if (listRef.current) {
+                        setCurrentPage(1);
+                    }
                     setPendingCommand(null);
                     return;
                 }
+                // Any other key cancels 'g' mode (unless it's a modifier)
+                if (!['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) {
+                    setPendingCommand(null);
+                }
+            }
 
-                // Handle 'z' mode
-                if (pendingCommand === 'z') {
-                    if (['z', 't', 'b'].includes(e.key)) {
-                        if (!listRef.current) return;
-
-                        let align: 'center' | 'start' | 'end' = 'center';
-                        if (e.key === 't') align = 'start';
-                        else if (e.key === 'b') align = 'end';
-
+            if (pendingCommand === 'z') {
+                e.preventDefault();
+                if (e.key === 'z') {
+                    if (listRef.current && fitMode === 'absolute') {
                         listRef.current.scrollToRow({
                             index: currentPageRef.current - 1,
-                            align,
+                            align: 'center',
                             behavior: 'instant',
                         });
-
-                        setPendingCommand(null);
                     }
-                    // Any other key: check if modifier. Use whitelist approach or blacklist.
-                    // User asked to ignore Ctrl.
-                    else if (!['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) {
-                        setPendingCommand(null);
-                    }
+                    setPendingCommand(null);
                     return;
                 }
-
-                // Handle 'g' mode
-                if (pendingCommand === 'g') {
-                    if (e.key === 'g') {
-                        // gg -> Top
-                        if (listRef.current) {
-                            addToHistory(currentPage);
-                            setCurrentPage(1);
-                            addToHistory(1);
-                        }
-                        setPendingCommand(null);
-                    } else if (!['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) {
-                        setPendingCommand(null);
-                    }
-                    return;
+                if (!['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) {
+                    setPendingCommand(null);
                 }
-
                 return;
             }
 
-            // 3. Normal Mode Key Bindings
-
-            // Escape Handling (Priority: Help > Pending > Outline focus > Sidebar focus)
+            // 2. Immediate Global Shortcuts
             if (e.key === 'Escape') {
                 e.preventDefault();
                 if (helpOpen) {
@@ -613,49 +618,47 @@ export default function PDFReader({ file }: PDFReaderProps) {
                 return;
             }
 
-            // Start 'z' mode
-            if (e.key === 'z') {
-                e.preventDefault();
-                setPendingCommand('z');
-                return;
-            }
-
-            // Start 'g' mode (lowercase only)
             if (e.key === 'g') {
                 e.preventDefault();
                 setPendingCommand('g');
                 return;
             }
 
-            // Immediate G (Shift+g)
             if (e.key === 'G') {
                 e.preventDefault();
-                if (listRef.current && numPages) {
-                    addToHistory(currentPage);
+                if (focusMode === 'outline' && flatOutline.length > 0) {
+                    setSelectedPath(flatOutline[flatOutline.length - 1].path);
+                } else if (listRef.current && numPages) {
                     setCurrentPage(numPages);
-                    addToHistory(numPages);
                 }
                 return;
             }
 
-            // Toggle Sidebar
+            if (e.key === 'z') {
+                e.preventDefault();
+                setPendingCommand('z');
+                return;
+            }
+
             if (e.key === 't') {
                 e.preventDefault();
                 toggleSidebar();
                 return;
             }
 
-            // Toggle Mode (Absolute/Relative)
             if (e.key === 'a') {
                 e.preventDefault();
                 toggleMode();
                 return;
             }
 
-            // +/- zoom is now handled in the RAF animation loop above
-            // (see animateScroll function)
+            if (e.key === '?') {
+                e.preventDefault();
+                toggleHelp();
+                return;
+            }
 
-            // Global Modes (Outline focus)
+            // 3. Mode-Specific Shortcuts
             if (focusMode === 'outline' && flatOutline.length > 0) {
                 const currentIndex = flatOutline.findIndex((i) => i.path === selectedPath);
 
@@ -689,19 +692,16 @@ export default function PDFReader({ file }: PDFReaderProps) {
                 return;
             }
 
-            // PDF Mode
             if (focusMode === 'pdf') {
                 if (e.key === 'l' || e.key === 'ArrowRight') {
                     e.preventDefault();
                     if (listRef.current && currentPageRef.current < (numPages || 0)) {
-                        const nextPage = currentPageRef.current + 1;
-                        setCurrentPage(nextPage);
+                        setCurrentPage(currentPageRef.current + 1);
                     }
                 } else if (e.key === 'h' || e.key === 'ArrowLeft') {
                     e.preventDefault();
                     if (listRef.current && currentPageRef.current > 1) {
-                        const prevPage = currentPageRef.current - 1;
-                        setCurrentPage(prevPage);
+                        setCurrentPage(currentPageRef.current - 1);
                     }
                 }
             }
@@ -724,6 +724,8 @@ export default function PDFReader({ file }: PDFReaderProps) {
             setSelectedPath,
             toggleOutlineExpand,
             jumpToDestination,
+            fitMode,
+            currentPage,
         ]
     );
 
@@ -930,6 +932,7 @@ export default function PDFReader({ file }: PDFReaderProps) {
             <div className="flex-1 relative overflow-hidden" onClick={() => setFocusMode('pdf')}>
                 {/* Sidebar Body - Overlay with transform animation */}
                 <aside
+                    ref={sidebarScrollRef}
                     className={clsx(
                         'absolute top-0 left-0 h-full w-80 z-20',
                         'transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] overflow-y-auto',

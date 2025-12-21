@@ -45,12 +45,13 @@ export default function PDFOutline({
             {items.map((item) => (
                 <div
                     key={item.path}
+                    id={`outline-item-${item.path}`}
                     className={clsx(
-                        'flex items-center py-1 px-2 cursor-pointer text-sm transition-colors rounded mx-1',
+                        'flex items-center py-1.5 px-2 cursor-pointer text-sm rounded mx-1 mb-0.5',
                         item.path === selectedPath
                             ? theme === 'dark'
-                                ? 'bg-[#333] text-white font-medium'
-                                : 'bg-blue-50 text-blue-700 font-medium'
+                                ? 'bg-blue-600/20 text-blue-400 ring-1 ring-blue-500/50 font-medium'
+                                : 'bg-blue-50 text-blue-700 ring-1 ring-blue-200 font-medium'
                             : theme === 'dark'
                               ? 'text-gray-300 hover:bg-[#333] hover:text-white'
                               : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
