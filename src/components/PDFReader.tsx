@@ -8,7 +8,14 @@ import AutoSizer from 'react-virtualized-auto-sizer';
 
 import React, { memo } from 'react';
 
-const Row = memo(({ index, style, renderScale, theme }: any) => {
+const Row = memo(({ index, style, renderScale, theme, numPages }: any) => {
+    // Spacer at start (index 0) and end (index numPages + 1)
+    const isSpacer = index === 0 || index === numPages + 1;
+
+    if (isSpacer) {
+        return <div style={style} />;
+    }
+
     return (
         <div
             style={{
@@ -26,8 +33,8 @@ const Row = memo(({ index, style, renderScale, theme }: any) => {
                 )}
             >
                 <Page
-                    pageNumber={index + 1}
-                    scale={renderScale} // Fixed render scale - never changes
+                    pageNumber={index} // Spacer is 0, first page is 1
+                    scale={renderScale}
                     renderTextLayer={true}
                     renderAnnotationLayer={true}
                 />
@@ -231,6 +238,9 @@ export default function PDFReader({ file }: PDFReaderProps) {
         loadPageDims();
     }, [currentPage, pdfDocument, numPages, baseWidth, baseHeight]);
 
+    // itemHeight uses FIXED renderScale - layout never changes during zoom
+    const itemHeight = baseHeight * renderScale + 24;
+
     // Handle initial selection and auto-scroll for outline
     useEffect(() => {
         if (focusMode === 'outline' && flatOutline.length > 0 && !selectedPath) {
@@ -337,10 +347,14 @@ export default function PDFReader({ file }: PDFReaderProps) {
             } else {
                 setSidebarOpen(true);
             }
-            setTimeout(() => setIsLayoutReady(true), 50);
+            setTimeout(() => {
+                setIsLayoutReady(true);
+                window.focus(); // Ensure we have focus to capture keys
+            }, 50);
         } catch (e) {
             console.error('Error getting pdf metadata', e);
             setIsLayoutReady(true);
+            window.focus();
         }
     }
 
@@ -399,8 +413,11 @@ export default function PDFReader({ file }: PDFReaderProps) {
     const scaleRef = useRef(renderScale);
     const currentPageRef = useRef(currentPage);
     const baseHeightRef = useRef(baseHeight);
+    const numPagesRef = useRef(numPages);
+    const targetScrollTopRef = useRef<number>(0);
     const isInternalPageUpdate = useRef(false);
 
+    // Sync refs
     useEffect(() => {
         scaleRef.current = renderScale;
     }, [renderScale]);
@@ -410,6 +427,16 @@ export default function PDFReader({ file }: PDFReaderProps) {
     useEffect(() => {
         baseHeightRef.current = baseHeight;
     }, [baseHeight]);
+    useEffect(() => {
+        numPagesRef.current = numPages;
+    }, [numPages]);
+
+    // Initialize targetScrollTopRef
+    useEffect(() => {
+        if (listRef.current?.element) {
+            targetScrollTopRef.current = listRef.current.element.scrollTop;
+        }
+    }, [isLayoutReady]);
 
     // Sync Scroll to Page Change
     useEffect(() => {
@@ -418,12 +445,21 @@ export default function PDFReader({ file }: PDFReaderProps) {
             isInternalPageUpdate.current = false;
             return;
         }
+        // If it's the very first page of a newly loaded document, we want to stay at itemHeight (Doc Top)
+        // rather than potentially being snapped higher by a generic "start" align.
         listRef.current.scrollToRow({
-            index: currentPage - 1,
-            align: 'start',
+            index: currentPage,
+            align: currentPage === 1 ? 'auto' : 'start',
             behavior: 'instant',
         });
     }, [currentPage, numPages]);
+
+    // Ensure we start at the document top (skipping spacer)
+    useLayoutEffect(() => {
+        if (isLayoutReady && listRef.current?.element && numPages) {
+            listRef.current.element.scrollTop = itemHeight;
+        }
+    }, [isLayoutReady, numPages, itemHeight]);
 
     const updatePageFromScroll = useCallback(
         (scrollTop: number) => {
@@ -431,7 +467,7 @@ export default function PDFReader({ file }: PDFReaderProps) {
             if (currentItemHeight <= 0 || !listRef.current?.element) return;
             const viewportHeight = listRef.current.element.clientHeight;
             const detectionPoint = scrollTop + viewportHeight / 2;
-            let newPage = Math.floor(detectionPoint / currentItemHeight) + 1;
+            let newPage = Math.floor(detectionPoint / currentItemHeight);
             if (numPages) {
                 newPage = Math.max(1, Math.min(newPage, numPages));
             }
@@ -443,11 +479,16 @@ export default function PDFReader({ file }: PDFReaderProps) {
         [numPages, setCurrentPage]
     );
 
+    // Keep targetScrollTopRef in sync with manual scrolling (mouse wheel, etc.)
     const onScroll = useCallback(
         (props: any) => {
             const offset = props?.scrollOffset ?? props?.target?.scrollTop ?? props?.scrollTop;
             if (typeof offset === 'number') {
                 updatePageFromScroll(offset);
+                // Also update targetScrollTopRef so next j/k starts from here
+                if (activeKeys.current.size === 0) {
+                    targetScrollTopRef.current = offset;
+                }
             }
         },
         [updatePageFromScroll]
@@ -461,7 +502,7 @@ export default function PDFReader({ file }: PDFReaderProps) {
         const FAST_SPEED = 60;
         const ZOOM_SPEED = 0.02;
 
-        let nextScrollTop = listRef.current.element.scrollTop;
+        let nextScrollTop = targetScrollTopRef.current;
         let changed = false;
 
         if (activeKeys.current.has('j') || activeKeys.current.has('ArrowDown')) {
@@ -508,11 +549,33 @@ export default function PDFReader({ file }: PDFReaderProps) {
             changed = true;
         }
 
-        if (changed && nextScrollTop !== listRef.current.element.scrollTop) {
-            listRef.current?.element?.scrollTo({
-                top: Math.round(nextScrollTop),
-                behavior: 'instant',
-            });
+        if (changed) {
+            const currentNumPages = numPagesRef.current;
+            const currentItemHeight = baseHeightRef.current * scaleRef.current + 24;
+
+            if (!currentNumPages || !listRef.current?.element) return;
+            const viewportHeight = listRef.current.element.clientHeight;
+            if (viewportHeight <= 0) return; // Wait for layout
+
+            // Document boundaries (without showing void excessively)
+            const docTop = currentItemHeight;
+            const docBottom = (currentNumPages + 1) * currentItemHeight - viewportHeight;
+
+            // Clamp: Stop manual scrolling at docTop/docBottom
+            // We use Math.max(docTop, docBottom) for the high bound to handle cases where
+            // the document is shorter than the viewport.
+            let clampedScroll = Math.max(
+                docTop,
+                Math.min(nextScrollTop, Math.max(docTop, docBottom))
+            );
+            targetScrollTopRef.current = clampedScroll;
+
+            if (clampedScroll !== listRef.current.element.scrollTop) {
+                listRef.current?.element?.scrollTo({
+                    top: Math.round(clampedScroll),
+                    behavior: 'instant',
+                });
+            }
         }
     };
 
@@ -525,6 +588,10 @@ export default function PDFReader({ file }: PDFReaderProps) {
             if (['j', 'k', 'd', 'u', 'ArrowDown', 'ArrowUp', '+', '=', '-'].includes(e.key)) {
                 e.preventDefault();
                 if (!activeKeys.current.has(e.key)) {
+                    // Sync targetScrollTopRef to actual position before starting animation
+                    if (activeKeys.current.size === 0 && listRef.current?.element) {
+                        targetScrollTopRef.current = listRef.current.element.scrollTop;
+                    }
                     activeKeys.current.add(e.key);
                     if (!requestRef.current) {
                         requestRef.current = requestAnimationFrame(animateScroll);
@@ -595,6 +662,7 @@ export default function PDFReader({ file }: PDFReaderProps) {
                     if (focusMode === 'outline' && flatOutline.length > 0) {
                         setSelectedPath(flatOutline[0].path);
                     } else if (listRef.current) {
+                        addToHistory(currentPageRef.current);
                         setCurrentPage(1);
                     }
                     setPendingCommand(null);
@@ -607,12 +675,21 @@ export default function PDFReader({ file }: PDFReaderProps) {
             }
 
             if (pendingCommand === 'z') {
-                e.preventDefault();
-                if (e.key === 'z') {
-                    if (listRef.current && fitMode === 'absolute') {
+                if (e.key === 'z' || e.key === 't' || e.key === 'b') {
+                    e.preventDefault();
+                    const align = e.key === 'z' ? 'center' : e.key === 't' ? 'start' : 'end';
+
+                    if (focusMode === 'outline' && sidebarScrollRef.current) {
+                        const selectedEl = sidebarScrollRef.current.querySelector(
+                            `#outline-item-${selectedPath?.replace(/[^a-zA-Z0-9-]/g, '\\$&')}`
+                        );
+                        if (selectedEl) {
+                            selectedEl.scrollIntoView({ behavior: 'auto', block: align });
+                        }
+                    } else if (listRef.current) {
                         listRef.current.scrollToRow({
-                            index: currentPageRef.current - 1,
-                            align: 'center',
+                            index: currentPageRef.current,
+                            align,
                             behavior: 'instant',
                         });
                     }
@@ -628,6 +705,7 @@ export default function PDFReader({ file }: PDFReaderProps) {
             // 2. Immediate Global Shortcuts
             if (e.key === 'Escape') {
                 e.preventDefault();
+                setPendingCommand(null);
                 if (helpOpen) {
                     toggleHelp();
                 } else if (focusMode === 'outline') {
@@ -649,6 +727,7 @@ export default function PDFReader({ file }: PDFReaderProps) {
                 if (focusMode === 'outline' && flatOutline.length > 0) {
                     setSelectedPath(flatOutline[flatOutline.length - 1].path);
                 } else if (listRef.current && numPages) {
+                    addToHistory(currentPageRef.current);
                     setCurrentPage(numPages);
                 }
                 return;
@@ -694,7 +773,10 @@ export default function PDFReader({ file }: PDFReaderProps) {
                     e.preventDefault();
                     if (currentIndex >= 0) {
                         const item = flatOutline[currentIndex];
-                        if (item.dest) jumpToDestination(item.dest);
+                        if (item.dest) {
+                            addToHistory(currentPageRef.current);
+                            jumpToDestination(item.dest);
+                        }
                     }
                 } else if (e.key === 'l' || e.key === 'ArrowRight') {
                     e.preventDefault();
@@ -748,9 +830,6 @@ export default function PDFReader({ file }: PDFReaderProps) {
             currentPage,
         ]
     );
-
-    // itemHeight uses FIXED renderScale - layout never changes during zoom
-    const itemHeight = baseHeight * renderScale + 24;
 
     // Breadcrumb: filename > current heading path based on currentPage
     const breadcrumb = useMemo(() => {
@@ -1073,11 +1152,11 @@ export default function PDFReader({ file }: PDFReaderProps) {
                                                     backgroundColor:
                                                         theme === 'dark' ? '#111' : '#f3f4f6',
                                                 }}
-                                                rowCount={numPages || 0}
+                                                rowCount={numPages ? numPages + 2 : 0}
                                                 rowHeight={itemHeight}
                                                 className="scrollbar-hide outline-none"
                                                 rowComponent={Row as any}
-                                                rowProps={{ renderScale, theme }}
+                                                rowProps={{ renderScale, theme, numPages }}
                                                 onScroll={onScroll}
                                             />
                                         </Document>

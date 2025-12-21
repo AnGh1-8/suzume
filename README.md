@@ -71,16 +71,16 @@ Press `?` in the app to view the full help menu.
 
 ### Navigation (PDF)
 
-| Key        | Action                    |
-| :--------- | :------------------------ |
-| `j` / `k`  | Scroll Down / Up          |
-| `d` / `u`  | Fast Scroll Down / Up     |
-| `h` / `l`  | Previous / Next Page      |
-| `ctrl + o` | Jump Back in History      |
-| `ctrl + i` | Jump Forward in History   |
-| `gg` / `G` | Go to First / Last Page   |
-| `zz`       | Center Current Page View  |
-| `:[num]`   | Jump to Page (e.g. `:10`) |
+| Key            | Action                     |
+| :------------- | :------------------------- |
+| `j` / `k`      | Scroll Down / Up           |
+| `d` / `u`      | Fast Scroll Down / Up      |
+| `h` / `l`      | Previous / Next Page       |
+| `ctrl + o`     | Jump Back in History       |
+| `ctrl + i`     | Jump Forward in History    |
+| `gg` / `G`     | Go to First / Last Page    |
+| `zz / zt / zb` | Center / Top / Bottom View |
+| `:[num]`       | Jump to Page (e.g. `:10`)  |
 
 | Command            | Description                         |
 | :----------------- | :---------------------------------- |
