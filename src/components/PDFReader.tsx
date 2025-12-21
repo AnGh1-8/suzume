@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback, useLayoutEffect } from 'react';
+import { useEffect, useRef, useState, useCallback, useLayoutEffect, useMemo } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 // @ts-ignore
 import { List } from 'react-window';
@@ -39,16 +39,7 @@ Row.displayName = 'PDFRow';
 
 import { usePDFStore } from '@/store/usePDFStore';
 import { useWindowSize, useKey, useDebounce } from 'react-use';
-import {
-    ChevronRight,
-    ChevronDown,
-    Search,
-    Menu,
-    ZoomIn,
-    ZoomOut,
-    X,
-    HelpCircle,
-} from 'lucide-react';
+import { ChevronRight, ChevronDown, Search, Menu, X, HelpCircle } from 'lucide-react';
 import PDFOutline, { FlatOutlineItem } from './PDFOutline';
 import clsx from 'clsx';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
@@ -78,8 +69,6 @@ export default function PDFReader({ file }: PDFReaderProps) {
         setFocusMode,
         toggleOutlineExpand,
         setSelectedPath,
-        zoomIn,
-        zoomOut,
         pendingCommand,
         setPendingCommand,
         theme,
@@ -100,6 +89,8 @@ export default function PDFReader({ file }: PDFReaderProps) {
     const windowScale = { width: windowWidth, height: windowHeight }; // Mock obj for dependency array if needed or just use vars
     // Raw Outline from react-pdf
     const [outline, setRawOutline] = useState<any[]>([]);
+    // Outline with resolved page numbers for breadcrumb
+    const [outlineWithPages, setOutlineWithPages] = useState<any[]>([]);
 
     // Flattened Outline Logic
     const flattenOutline = (items: any[], depth = 0, parentPath = ''): FlatOutlineItem[] => {
@@ -271,6 +262,44 @@ export default function PDFReader({ file }: PDFReaderProps) {
             setIsLayoutReady(true); // Show anyway on error
         }
     }
+
+    // Resolve page numbers for outline items (for breadcrumb based on current page)
+    useEffect(() => {
+        if (!pdfDocument || !outline || outline.length === 0) {
+            setOutlineWithPages([]);
+            return;
+        }
+
+        const resolvePageNumbers = async (items: any[]): Promise<any[]> => {
+            const result = [];
+            for (const item of items) {
+                let pageNumber = 0;
+                try {
+                    let dest = item.dest;
+                    if (typeof dest === 'string') {
+                        dest = await pdfDocument.getDestination(dest);
+                    }
+                    if (dest && dest[0]) {
+                        pageNumber = (await pdfDocument.getPageIndex(dest[0])) + 1;
+                    }
+                } catch (e) {
+                    // Ignore errors
+                }
+
+                const children =
+                    item.items && item.items.length > 0 ? await resolvePageNumbers(item.items) : [];
+
+                result.push({
+                    title: item.title,
+                    pageNumber,
+                    items: children,
+                });
+            }
+            return result;
+        };
+
+        resolvePageNumbers(outline).then(setOutlineWithPages);
+    }, [pdfDocument, outline]);
 
     // Shared Page Update Logic
     // Use refs to access latest state inside stale closures (useEffect/animateScroll/requestAnimationFrame)
@@ -655,6 +684,46 @@ export default function PDFReader({ file }: PDFReaderProps) {
     // CSS transform ratio for visual zoom
     const transformRatio = visualScale / renderScale;
 
+    // Breadcrumb: filename > current heading path based on currentPage
+    const breadcrumb = useMemo(() => {
+        // Get filename
+        let filename = '';
+        if (typeof file === 'string') {
+            filename = file.split('/').pop() || file;
+        } else if (file instanceof File) {
+            filename = file.name;
+        }
+        // Remove .pdf extension for cleaner display
+        filename = filename.replace(/\.pdf$/i, '');
+
+        if (!outlineWithPages || outlineWithPages.length === 0) {
+            return { filename, path: [] as string[] };
+        }
+
+        // Find active path based on currentPage
+        // At each level, find the last item whose pageNumber <= currentPage
+        const titles: string[] = [];
+
+        const findActivePath = (items: any[]): void => {
+            let activeItem: any = null;
+            for (const item of items) {
+                if (item.pageNumber > 0 && item.pageNumber <= currentPage) {
+                    activeItem = item;
+                }
+            }
+            if (activeItem) {
+                titles.push(activeItem.title);
+                if (activeItem.items && activeItem.items.length > 0) {
+                    findActivePath(activeItem.items);
+                }
+            }
+        };
+
+        findActivePath(outlineWithPages);
+
+        return { filename, path: titles };
+    }, [file, outlineWithPages, currentPage]);
+
     return (
         <div
             className={clsx(
@@ -747,14 +816,36 @@ export default function PDFReader({ file }: PDFReaderProps) {
                                 />
                             </button>
                         )}
-                        <span
-                            className={clsx(
-                                'text-sm transition-colors',
-                                theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
-                            )}
-                        >
-                            Page {currentPage} / {numPages || '-'}
-                        </span>
+                        {/* Breadcrumb: filename > path items */}
+                        <div className="flex items-center text-sm min-w-0 flex-1">
+                            <span
+                                className={clsx(
+                                    'font-medium shrink-0',
+                                    theme === 'dark' ? 'text-gray-200' : 'text-gray-700'
+                                )}
+                            >
+                                {breadcrumb.filename || 'Document'}
+                            </span>
+                            {breadcrumb.path.map((title, index) => (
+                                <span key={index} className="flex items-center min-w-0">
+                                    <ChevronRight
+                                        size={14}
+                                        className="mx-1 text-gray-400 shrink-0"
+                                    />
+                                    <span
+                                        className={clsx(
+                                            'truncate',
+                                            index === breadcrumb.path.length - 1
+                                                ? 'max-w-[300px]'
+                                                : 'max-w-[150px]',
+                                            theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+                                        )}
+                                    >
+                                        {title}
+                                    </span>
+                                </span>
+                            ))}
+                        </div>
                         {pendingCommand && (
                             <span
                                 className={clsx(
@@ -768,31 +859,51 @@ export default function PDFReader({ file }: PDFReaderProps) {
                             </span>
                         )}
                     </div>
-                    <div className="flex items-center space-x-2">
-                        <button
-                            onClick={zoomOut}
+                    {/* Right side: Useful info */}
+                    <div className="flex items-center space-x-3 text-xs">
+                        {/* Page number */}
+                        <span
                             className={clsx(
-                                'p-1 rounded',
-                                theme === 'dark'
-                                    ? 'hover:bg-[#333]'
-                                    : 'hover:bg-gray-100 text-gray-700'
+                                'px-2 py-0.5 rounded font-mono',
+                                theme === 'dark' ? 'bg-[#333]' : 'bg-gray-100 text-gray-600'
                             )}
                         >
-                            <ZoomOut size={18} />
-                        </button>
-                        <span className="text-xs w-12 text-center">
+                            {currentPage}/{numPages || '-'}
+                        </span>
+                        {/* Zoom percentage */}
+                        <span
+                            className={clsx(
+                                'px-2 py-0.5 rounded font-mono',
+                                theme === 'dark' ? 'bg-[#333]' : 'bg-gray-100 text-gray-600'
+                            )}
+                        >
                             {Math.round(visualScale * 100)}%
                         </span>
+                        {/* Fit mode indicator */}
+                        {fitMode !== 'custom' && (
+                            <span
+                                className={clsx(
+                                    'px-2 py-0.5 rounded',
+                                    theme === 'dark'
+                                        ? 'bg-blue-600/20 text-blue-400'
+                                        : 'bg-blue-100 text-blue-700'
+                                )}
+                            >
+                                {fitMode === 'fit-width' ? 'W' : 'F'}
+                            </span>
+                        )}
+                        {/* Help hint */}
                         <button
-                            onClick={zoomIn}
+                            onClick={toggleHelp}
                             className={clsx(
-                                'p-1 rounded',
+                                'px-2 py-0.5 rounded flex items-center gap-1',
                                 theme === 'dark'
-                                    ? 'hover:bg-[#333]'
-                                    : 'hover:bg-gray-100 text-gray-700'
+                                    ? 'hover:bg-[#333] text-gray-400'
+                                    : 'hover:bg-gray-100 text-gray-500'
                             )}
                         >
-                            <ZoomIn size={18} />
+                            <HelpCircle size={14} />
+                            <span className="font-mono">?</span>
                         </button>
                     </div>
                 </header>
