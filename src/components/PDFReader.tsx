@@ -64,7 +64,7 @@ export default function PDFReader({ file }: PDFReaderProps) {
         selectedPath,
         setNumPages,
         setCurrentPage,
-        toggleSidebar,
+        toggleSidebar: storeToggleSidebar,
         setSidebarOpen,
         setFocusMode,
         toggleOutlineExpand,
@@ -87,10 +87,25 @@ export default function PDFReader({ file }: PDFReaderProps) {
     const listRef = useRef<any>(null);
     const { width: windowWidth, height: windowHeight } = useWindowSize(); // Clean usage
     const windowScale = { width: windowWidth, height: windowHeight }; // Mock obj for dependency array if needed or just use vars
+
     // Raw Outline from react-pdf
     const [outline, setRawOutline] = useState<any[]>([]);
     // Outline with resolved page numbers for breadcrumb
     const [outlineWithPages, setOutlineWithPages] = useState<any[]>([]);
+
+    // Zoom transition state - only enable transition when sidebar toggles
+    const [isZoomTransitioning, setIsZoomTransitioning] = useState(false);
+
+    // Wrapper for toggleSidebar to ensure transition state is set synchronously with layout change
+    const toggleSidebar = useCallback(() => {
+        setIsZoomTransitioning(true);
+        storeToggleSidebar();
+    }, [storeToggleSidebar]);
+
+    useEffect(() => {
+        const timer = setTimeout(() => setIsZoomTransitioning(false), 300);
+        return () => clearTimeout(timer);
+    }, [sidebarOpen]);
 
     // Flattened Outline Logic
     const flattenOutline = (items: any[], depth = 0, parentPath = ''): FlatOutlineItem[] => {
@@ -166,6 +181,11 @@ export default function PDFReader({ file }: PDFReaderProps) {
     };
 
     // --- Dynamic Scaling Logic ---
+    // Base dimensions for synchronous scale calculation
+    const [baseWidth, setBaseWidth] = useState(0);
+    const [baseHeight, setBaseHeight] = useState(800);
+
+    // --- Dynamic Scaling Logic ---
     useEffect(() => {
         if (!pdfDocument || !numPages) return;
 
@@ -177,10 +197,16 @@ export default function PDFReader({ file }: PDFReaderProps) {
                 const page = await pdfDocument.getPage(currentPage);
                 const viewport = page.getViewport({ scale: 1 });
                 const { width: pageWidth, height: pageHeight } = viewport;
+                // Cache dimensions for sync calculation
+                if (pageWidth !== baseWidth) setBaseWidth(pageWidth);
+                if (pageHeight !== baseHeight) setBaseHeight(pageHeight);
+
                 const { width: windowWidth, height: windowHeight } = windowScale; // Use react-use window size
 
-                // Subtract sidebar width if open (approx 320px)
-                const availableWidth = sidebarOpen ? windowWidth - 320 : windowWidth;
+                // In fit-width/fit-page modes, subtract sidebar width if open
+                // In custom mode, sidebar is overlay and doesn't affect PDF layout
+                const availableWidth =
+                    fitMode !== 'custom' && sidebarOpen ? windowWidth - 320 : windowWidth;
 
                 let newScale = visualScale;
 
@@ -202,8 +228,9 @@ export default function PDFReader({ file }: PDFReaderProps) {
             }
         };
 
+        // Run scale calculation
         calculateScale();
-        // Re-calculate on resize (windowScale changes) or sidebar toggle
+        // Re-calculate on resize, sidebar toggle, or fit mode change
     }, [
         fitMode,
         fitRatio,
@@ -223,7 +250,6 @@ export default function PDFReader({ file }: PDFReaderProps) {
     // const [pendingCommand, setPendingCommand] = useState<null | 'z' | 'g'>(null); // Moved to global store
     const activeKeys = useRef<Set<string>>(new Set());
     const requestRef = useRef<number | undefined>(undefined);
-    const [baseHeight, setBaseHeight] = useState(800);
 
     // Load success handler
     // We use isLayoutReady to mask the UI until we've decided on the sidebar state to prevent flashing
@@ -682,7 +708,28 @@ export default function PDFReader({ file }: PDFReaderProps) {
     const itemHeight = baseHeight * renderScale + 24;
 
     // CSS transform ratio for visual zoom
-    const transformRatio = visualScale / renderScale;
+    // Calculate REAL-TIME visual scale for rendering synchronous with layout
+    const currentVisualScale = useMemo(() => {
+        if (fitMode === 'custom' || !baseWidth || !baseHeight) {
+            return visualScale;
+        }
+
+        const { width: windowWidth, height: windowHeight } = windowScale;
+        const availableWidth = sidebarOpen ? windowWidth - 320 : windowWidth;
+
+        if (fitMode === 'fit-width') {
+            return (availableWidth * fitRatio) / baseWidth;
+        } else if (fitMode === 'fit-page') {
+            const widthScale = availableWidth / baseWidth;
+            const heightScale = windowHeight / baseHeight;
+            return Math.min(widthScale, heightScale) * 0.95;
+        }
+
+        return visualScale;
+    }, [fitMode, fitRatio, windowScale, sidebarOpen, baseWidth, baseHeight, visualScale]);
+
+    // CSS transform ratio for visual zoom
+    const transformRatio = currentVisualScale / renderScale;
 
     // Breadcrumb: filename > current heading path based on currentPage
     const breadcrumb = useMemo(() => {
@@ -727,95 +774,68 @@ export default function PDFReader({ file }: PDFReaderProps) {
     return (
         <div
             className={clsx(
-                'flex h-screen w-full transition-opacity duration-500 ease-out',
+                'flex flex-col h-screen w-full transition-opacity duration-500 ease-out overflow-hidden',
                 theme === 'dark' ? 'bg-[#1a1a1a] text-gray-200' : 'bg-[#f3f4f6] text-gray-800',
                 isLayoutReady ? 'opacity-100' : 'opacity-0'
             )}
         >
-            {/* Sidebar - Instant toggle */}
-            <aside
-                className={clsx(
-                    'flex flex-col overflow-hidden',
-                    theme === 'dark' ? 'bg-[#1a1a1a]' : 'bg-white',
-                    sidebarOpen
-                        ? `w-80 border-r ${theme === 'dark' ? 'border-[#333]' : 'border-gray-200 shadow-sm'}`
-                        : 'w-0 border-none',
-                    focusMode === 'outline' && 'ring-1 ring-blue-500 z-10'
-                )}
-            >
-                <div className="w-80 flex flex-col h-full">
-                    {' '}
-                    {/* Inner wrapper to maintain width during transition */}
-                    <div
-                        className={clsx(
-                            'p-4 border-b flex justify-between items-center',
-                            theme === 'dark'
-                                ? 'border-[#333] bg-[#222]'
-                                : 'border-gray-200 bg-white'
-                        )}
-                    >
-                        <h2
-                            className={clsx(
-                                'font-semibold text-sm tracking-wide',
-                                theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
-                            )}
-                        >
-                            OUTLINE{' '}
-                            {focusMode === 'outline' && (
-                                <span className="text-blue-500 ml-2 text-xs">[FOCUSED]</span>
-                            )}
-                        </h2>
-                        <button onClick={toggleSidebar}>
-                            <X
-                                size={16}
-                                className={theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}
-                            />
-                        </button>
-                    </div>
-                    <div
-                        className={clsx(
-                            'flex-1 overflow-y-auto p-2 w-full',
-                            theme === 'dark' ? 'bg-[#1a1a1a]' : 'bg-white'
-                        )}
-                    >
-                        <Document file={file} onLoadSuccess={onDocumentLoadSuccess}>
-                            <PDFOutline
-                                items={flatOutline}
-                                selectedPath={selectedPath}
-                                onItemClick={(item: FlatOutlineItem) => {
-                                    setSelectedPath(item.path);
-                                    if (item.dest) jumpToDestination(item.dest);
-                                }}
-                                onToggleExpand={toggleOutlineExpand}
-                            />
-                        </Document>
-                    </div>
-                </div>
-            </aside>
-
-            {/* Main Content */}
-            <div
-                className="flex-1 flex flex-col h-full relative"
-                onClick={() => setFocusMode('pdf')}
-            >
-                {/* Toolbar */}
-                <header
+            {/* Header Row - relative container for stacking */}
+            <div className="relative h-12 shrink-0 z-30 overflow-hidden">
+                {/* Sidebar Header - Overlay with transform */}
+                <div
                     className={clsx(
-                        'h-12 border-b flex items-center px-4 justify-between transition-colors',
-                        theme === 'dark'
-                            ? 'border-[#333] bg-[#222]'
-                            : 'border-gray-200 bg-white shadow-sm z-10'
+                        'absolute top-0 left-0 w-80 h-full flex items-center justify-between px-4 border-b z-20 transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
+                        theme === 'dark' ? 'border-[#333] bg-[#222]' : 'border-gray-200 bg-white',
+                        sidebarOpen ? 'translate-x-0' : '-translate-x-full'
                     )}
                 >
-                    <div className="flex items-center space-x-4">
-                        {!sidebarOpen && (
-                            <button onClick={toggleSidebar}>
-                                <Menu
-                                    size={18}
-                                    className={theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}
-                                />
-                            </button>
+                    <h2
+                        className={clsx(
+                            'font-semibold text-sm tracking-wide whitespace-nowrap',
+                            theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
                         )}
+                    >
+                        OUTLINE{' '}
+                        {focusMode === 'outline' && (
+                            <span className="text-blue-500 ml-2 text-xs">[FOCUSED]</span>
+                        )}
+                    </h2>
+                    <button onClick={toggleSidebar}>
+                        <X
+                            size={16}
+                            className={theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}
+                        />
+                    </button>
+                </div>
+
+                {/* Main Header - Full Width Underneath */}
+                <header
+                    className={clsx(
+                        'absolute inset-0 flex items-center justify-between px-4 border-b z-10 transition-colors',
+                        theme === 'dark'
+                            ? 'border-[#333] bg-[#222]'
+                            : 'border-gray-200 bg-white shadow-sm'
+                    )}
+                >
+                    {/* Left Group: Menu + Breadcrumb - Translatable */}
+                    <div
+                        className={clsx(
+                            'flex items-center space-x-4 transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] max-w-full',
+                            sidebarOpen ? 'translate-x-80' : 'translate-x-0'
+                        )}
+                    >
+                        <button
+                            onClick={toggleSidebar}
+                            className={clsx(
+                                'transition-opacity duration-300',
+                                sidebarOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'
+                            )}
+                        >
+                            <Menu
+                                size={18}
+                                className={theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}
+                            />
+                        </button>
                         {/* Breadcrumb: filename > path items */}
                         <div className="flex items-center text-sm min-w-0 flex-1">
                             <span
@@ -859,8 +879,13 @@ export default function PDFReader({ file }: PDFReaderProps) {
                             </span>
                         )}
                     </div>
-                    {/* Right side: Useful info */}
-                    <div className="flex items-center space-x-3 text-xs">
+                    {/* Right side: Useful info - Fixed Background to cover potential overlap */}
+                    <div
+                        className={clsx(
+                            'flex items-center space-x-3 text-xs z-10 pl-4 relative',
+                            theme === 'dark' ? 'bg-[#222]' : 'bg-white'
+                        )}
+                    >
                         {/* Page number */}
                         <span
                             className={clsx(
@@ -879,19 +904,15 @@ export default function PDFReader({ file }: PDFReaderProps) {
                         >
                             {Math.round(visualScale * 100)}%
                         </span>
-                        {/* Fit mode indicator */}
-                        {fitMode !== 'custom' && (
-                            <span
-                                className={clsx(
-                                    'px-2 py-0.5 rounded',
-                                    theme === 'dark'
-                                        ? 'bg-blue-600/20 text-blue-400'
-                                        : 'bg-blue-100 text-blue-700'
-                                )}
-                            >
-                                {fitMode === 'fit-width' ? 'W' : 'F'}
-                            </span>
-                        )}
+                        {/* Fit mode indicator - always visible */}
+                        <span
+                            className={clsx(
+                                'px-2 py-0.5 rounded font-mono',
+                                theme === 'dark' ? 'bg-[#333]' : 'bg-gray-100 text-gray-600'
+                            )}
+                        >
+                            {fitMode === 'custom' ? 'Z' : fitMode === 'fit-width' ? 'W' : 'P'}
+                        </span>
                         {/* Help hint */}
                         <button
                             onClick={toggleHelp}
@@ -907,19 +928,91 @@ export default function PDFReader({ file }: PDFReaderProps) {
                         </button>
                     </div>
                 </header>
+            </div>
+
+            {/* Content Row - relative container for sidebar overlay */}
+            <div className="flex-1 relative overflow-hidden" onClick={() => setFocusMode('pdf')}>
+                {/* Sidebar Body - Overlay with transform animation */}
+                <aside
+                    className={clsx(
+                        'absolute top-0 left-0 h-full w-80 z-20',
+                        'transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] overflow-y-auto',
+                        theme === 'dark'
+                            ? 'bg-[#1a1a1a] border-r border-[#333]'
+                            : 'bg-white border-r border-gray-200 shadow-lg',
+                        sidebarOpen ? 'translate-x-0' : '-translate-x-full',
+                        focusMode === 'outline' && 'ring-1 ring-blue-500'
+                    )}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        setFocusMode('outline');
+                    }}
+                >
+                    <div className="p-2">
+                        {/* Use the shared flatOutline state - no need for nested Document here */}
+                        <PDFOutline
+                            items={flatOutline}
+                            selectedPath={selectedPath}
+                            onItemClick={(item: FlatOutlineItem) => {
+                                setSelectedPath(item.path);
+                                if (item.dest) jumpToDestination(item.dest);
+                            }}
+                            onToggleExpand={toggleOutlineExpand}
+                        />
+                    </div>
+                </aside>
 
                 {/* PDF View - Container applies CSS transform for zoom */}
                 <div
                     className={clsx(
-                        'flex-1 relative transition-colors duration-300 overflow-hidden',
-                        theme === 'dark' ? 'bg-[#111]' : 'bg-[#f3f4f6]'
+                        'absolute inset-0 transition-colors duration-300 overflow-hidden',
+                        theme === 'dark' ? 'bg-[#111]' : 'bg-[#f3f4f6]' // Ensure root has theme background
                     )}
+                    style={{ backgroundColor: theme === 'dark' ? '#111' : '#f3f4f6' }}
                 >
                     <AutoSizer>
                         {({ height, width }) => {
-                            // Logical dimensions for List (before transform)
-                            const logicalHeight = height / transformRatio;
-                            const logicalWidth = width / transformRatio;
+                            // ULTRA-WIDE LOGICAL PLANE:
+                            // Fixed large width (3000px) as the logical layout plane for horizontal stability.
+                            const logicalWidth = 3000;
+
+                            // HEIGHT HYSTERESIS LOGIC:
+                            // To prevent "black flashes" during transition, we must ensure the logical height
+                            // is large enough to cover the screen even at the SMALLER of the two scale states.
+
+                            // 1. Calculate ratios for both states
+                            const fitWidthRatio = fitMode === 'fit-width';
+                            const fitPageRatio = fitMode === 'fit-page';
+
+                            const getRatio = (isSidebarOpen: boolean) => {
+                                if (fitMode === 'custom' || !baseWidth || !baseHeight)
+                                    return visualScale / renderScale;
+                                const availableWidth = isSidebarOpen
+                                    ? windowWidth - 320
+                                    : windowWidth;
+                                let scale = visualScale;
+                                if (fitWidthRatio) scale = (availableWidth * fitRatio) / baseWidth;
+                                else if (fitPageRatio) {
+                                    scale =
+                                        Math.min(
+                                            availableWidth / baseWidth,
+                                            windowHeight / baseHeight
+                                        ) * 0.95;
+                                }
+                                return scale / renderScale;
+                            };
+
+                            const ratioOpen = getRatio(true);
+                            const ratioClosed = getRatio(false);
+
+                            // 2. During transition, use the logical height that corresponds to the SMALLEST ratio
+                            // (which is the LARGEST logical height). This ensures full coverage.
+                            const transitionHeight = height / Math.min(ratioOpen, ratioClosed);
+                            const nominalHeight = height / transformRatio;
+
+                            const logicalHeight = isZoomTransitioning
+                                ? transitionHeight
+                                : nominalHeight;
 
                             return (
                                 <div
@@ -927,34 +1020,50 @@ export default function PDFReader({ file }: PDFReaderProps) {
                                         height,
                                         width,
                                         overflow: 'hidden',
+                                        display: 'flex',
+                                        justifyContent: 'center',
+                                        backgroundColor: theme === 'dark' ? '#111' : '#f3f4f6',
                                     }}
                                 >
-                                    {/* Transform container - GPU accelerated for smooth zoom */}
                                     <div
                                         style={{
-                                            transform: `scale(${transformRatio}) translateZ(0)`,
-                                            transformOrigin: 'top left',
+                                            transform: `translateX(${sidebarOpen ? 160 : 0}px) scale(${transformRatio}) translateZ(0)`,
+                                            transformOrigin: 'center top',
+                                            transition: isZoomTransitioning
+                                                ? 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)'
+                                                : 'none',
                                             width: logicalWidth,
                                             height: logicalHeight,
                                             willChange: 'transform',
                                             backfaceVisibility: 'hidden',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            alignItems: 'center',
+                                            backgroundColor: theme === 'dark' ? '#111' : '#f3f4f6',
                                         }}
                                     >
                                         <Document
                                             file={file}
                                             onLoadSuccess={onDocumentLoadSuccess}
-                                            loading={
-                                                <div className="p-10 text-center text-gray-500">
-                                                    Loading Document...
-                                                </div>
-                                            }
                                             className="flex flex-col items-center"
+                                            loading={
+                                                <div
+                                                    style={{
+                                                        height: height,
+                                                        width: width,
+                                                        backgroundColor:
+                                                            theme === 'dark' ? '#111' : '#f3f4f6',
+                                                    }}
+                                                />
+                                            }
                                         >
                                             <List
                                                 listRef={listRef}
                                                 style={{
                                                     height: logicalHeight,
                                                     width: logicalWidth,
+                                                    backgroundColor:
+                                                        theme === 'dark' ? '#111' : '#f3f4f6',
                                                 }}
                                                 rowCount={numPages || 0}
                                                 rowHeight={itemHeight}

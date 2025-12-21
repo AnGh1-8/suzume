@@ -63,7 +63,7 @@ export default function VimInput() {
                 } else {
                     document.exitFullscreen();
                 }
-            } else if (['fit'].includes(cmd)) {
+            } else if (['p', 'page'].includes(cmd)) {
                 setFitMode('fit-page');
             } else if (['width', 'w'].includes(cmd)) {
                 setFitMode('fit-width');
@@ -79,7 +79,7 @@ export default function VimInput() {
                 } else {
                     setVisualScale(1.2);
                 }
-            } else if (['go', 'page', 'p', 'n'].includes(cmd)) {
+            } else if (['go', 'n'].includes(cmd)) {
                 if (arg && !isNaN(arg) && arg > 0) {
                     addToHistory(currentPage);
                     setCurrentPage(arg);
