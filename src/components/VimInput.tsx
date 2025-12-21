@@ -26,6 +26,9 @@ export default function VimInput() {
         availableWidth,
         availableHeight,
         renderScale,
+        fitMode,
+        visualScale,
+        fitRatio,
     } = usePDFStore();
 
     useEffect(() => {
@@ -96,17 +99,28 @@ export default function VimInput() {
                 }
             } else if (['go', 'n'].includes(cmd)) {
                 if (arg && !isNaN(arg) && arg > 0) {
-                    addToHistory(currentPage);
+                    const scrollEl = document.querySelector('.scrollbar-hide.outline-none');
+                    const scrollTop = scrollEl ? (scrollEl as HTMLElement).scrollTop : 0;
+                    addToHistory(currentPage, scrollTop);
                     setCurrentPage(arg);
-                    addToHistory(arg);
+
+                    // Unified logical calculation: targetPage * (baseHeight * renderScale + 24)
+                    const logicalItemHeight = baseHeight * renderScale + 24;
+                    const arrivalScroll = arg * logicalItemHeight;
+                    addToHistory(arg, arrivalScroll);
                 }
             } else if (!isNaN(parseInt(cmd, 10))) {
                 // Handle direct number input (e.g., :42)
                 const pageNum = parseInt(cmd, 10);
                 if (pageNum > 0) {
-                    addToHistory(currentPage);
+                    const scrollEl = document.querySelector('.scrollbar-hide.outline-none');
+                    const scrollTop = scrollEl ? (scrollEl as HTMLElement).scrollTop : 0;
+                    addToHistory(currentPage, scrollTop);
                     setCurrentPage(pageNum);
-                    addToHistory(pageNum);
+
+                    const logicalItemHeight = baseHeight * renderScale + 24;
+                    const arrivalScroll = pageNum * logicalItemHeight;
+                    addToHistory(pageNum, arrivalScroll);
                 }
             }
         }

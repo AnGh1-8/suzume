@@ -98,7 +98,15 @@ export default function PDFReader({ file }: PDFReaderProps) {
         setBaseHeight: setBaseHeightStore,
         setAvailableWidth: setAvailableWidthStore,
         setAvailableHeight: setAvailableHeightStore,
+        fileProgress,
+        updateProgress,
     } = usePDFStore();
+
+    const hasRestoredPosition = useRef(false);
+
+    useEffect(() => {
+        hasRestoredPosition.current = false;
+    }, [file]);
 
     const listRef = useRef<any>(null);
     const sidebarScrollRef = useRef<HTMLDivElement>(null);
@@ -188,10 +196,28 @@ export default function PDFReader({ file }: PDFReaderProps) {
             if (!explicitDest) return;
 
             const pageIndex = await pdfDocument.getPageIndex(explicitDest[0]);
-            addToHistory(currentPage);
+            const currentScroll = listRef.current?.element?.scrollTop || 0;
+            addToHistory(currentPageRef.current, currentScroll);
             const targetPage = pageIndex + 1;
+
+            // Bypass snap-to-top for precise destination jumps
+            isInternalPageUpdate.current = true;
             setCurrentPage(targetPage);
-            addToHistory(targetPage);
+
+            // Standard logical height jump
+            const logicalItemHeight = baseHeightRef.current * scaleRef.current + 24;
+            const targetScroll = targetPage * logicalItemHeight;
+            addToHistory(targetPage, targetScroll);
+
+            if (listRef.current?.element) {
+                listRef.current.element.scrollTo({
+                    top: targetScroll,
+                    behavior: 'instant',
+                });
+                targetScrollTopRef.current = targetScroll;
+                // Explicitly sync after jump completes
+                updateProgress(targetPage, targetScroll);
+            }
         } catch (e) {
             console.error('Jump error', e);
         }
@@ -226,7 +252,7 @@ export default function PDFReader({ file }: PDFReaderProps) {
         if (!pdfDocument || !numPages) return;
         const loadPageDims = async () => {
             try {
-                if (currentPage > pdfDocument.numPages) return;
+                if (currentPage < 1 || currentPage > (pdfDocument.numPages || 0)) return;
                 const page = await pdfDocument.getPage(currentPage);
                 const viewport = page.getViewport({ scale: 1 });
                 if (viewport.width !== baseWidth) setBaseWidth(viewport.width);
@@ -309,12 +335,16 @@ export default function PDFReader({ file }: PDFReaderProps) {
      * DERIVE TRANSFORM RATIO:
      */
     const transformRatio = useMemo(() => {
-        if (!baseWidth || !baseHeight) return visualScale / renderScale;
-        let scale = visualScale;
+        if (!baseWidth || !baseHeight || !renderScale)
+            return (visualScale || 1.2) / (renderScale || 1.5);
+        let scale = visualScale || 1.2;
         if (fitMode === 'relative') {
-            scale = (availableWidth * fitRatio) / baseWidth;
+            // Ensure availableWidth and baseWidth are sanitized
+            const safeAvail = Math.max(100, availableWidth);
+            const safeBase = Math.max(100, baseWidth);
+            scale = (safeAvail * (fitRatio || 0.9)) / safeBase;
         }
-        return scale / renderScale;
+        return Math.max(0.01, scale / (renderScale || 1.5));
     }, [fitMode, fitRatio, visualScale, renderScale, baseWidth, baseHeight, availableWidth]);
 
     const activeKeys = useRef<Set<string>>(new Set());
@@ -325,12 +355,9 @@ export default function PDFReader({ file }: PDFReaderProps) {
     // Reset ready state when file changes
     useEffect(() => {
         setIsLayoutReady(false);
-        setFitMode('relative');
-        setFitRatio(0.9);
-        setFocusMode('pdf');
         setRawOutline([]);
         setOutlineWithPages([]);
-    }, [file, setFitMode, setFitRatio, setFocusMode]);
+    }, [file]);
 
     async function onDocumentLoadSuccess(pdf: any) {
         setPdfDocument(pdf);
@@ -416,6 +443,7 @@ export default function PDFReader({ file }: PDFReaderProps) {
     const numPagesRef = useRef(numPages);
     const targetScrollTopRef = useRef<number>(0);
     const isInternalPageUpdate = useRef(false);
+    const transformRatioRef = useRef(1);
 
     // Sync refs
     useEffect(() => {
@@ -454,12 +482,57 @@ export default function PDFReader({ file }: PDFReaderProps) {
         });
     }, [currentPage, numPages]);
 
-    // Ensure we start at the document top (skipping spacer)
+    // Ensure we start at the document top (skipping spacer) if we are on page 1,
+    // OR restore the exact previous position if available.
     useLayoutEffect(() => {
-        if (isLayoutReady && listRef.current?.element && numPages) {
-            listRef.current.element.scrollTop = itemHeight;
+        if (isLayoutReady && listRef.current?.element && numPages && !hasRestoredPosition.current) {
+            const fileName = typeof file === 'string' ? file : file.name;
+            const restored = fileProgress[fileName];
+
+            if (restored && restored.scrollTop > 0) {
+                listRef.current.element.scrollTop = restored.scrollTop;
+                targetScrollTopRef.current = restored.scrollTop;
+                hasRestoredPosition.current = true;
+            } else if (currentPage === 1) {
+                listRef.current.element.scrollTop = itemHeight;
+                hasRestoredPosition.current = true;
+            } else {
+                // If we have a currentPage > 1 but no scrollTop progress,
+                // the existing Sync Scroll to Page Change useEffect will take us to the top of that page.
+                hasRestoredPosition.current = true;
+            }
         }
-    }, [isLayoutReady, numPages, itemHeight]);
+    }, [isLayoutReady, numPages, itemHeight, file, fileProgress, currentPage]);
+
+    const [lastSyncScroll, setLastSyncScroll] = useState(0);
+
+    // Periodically sync scroll progress to store (Debounced)
+    useEffect(() => {
+        if (!isLayoutReady || !listRef.current?.element || isZoomTransitioning) return;
+
+        const timer = setTimeout(() => {
+            if (listRef.current?.element) {
+                const currentScroll = listRef.current.element.scrollTop;
+                // Don't save if we are at the very top (spacer height) unless it's intended
+                // This prevents accidentally saving the 'loading' position
+                if (currentScroll > 0) {
+                    updateProgress(currentPageRef.current, currentScroll);
+                }
+            }
+        }, 1500); // Slightly longer debounce for stability
+
+        return () => clearTimeout(timer);
+    }, [
+        currentPage,
+        lastSyncScroll,
+        updateProgress,
+        isLayoutReady,
+        isZoomTransitioning,
+        visualScale,
+        renderScale,
+        fitMode,
+        fitRatio,
+    ]);
 
     const updatePageFromScroll = useCallback(
         (scrollTop: number) => {
@@ -468,26 +541,25 @@ export default function PDFReader({ file }: PDFReaderProps) {
             const viewportHeight = listRef.current.element.clientHeight;
             const detectionPoint = scrollTop + viewportHeight / 2;
             let newPage = Math.floor(detectionPoint / currentItemHeight);
-            if (numPages) {
-                newPage = Math.max(1, Math.min(newPage, numPages));
-            }
+            newPage = Math.max(1, Math.min(newPage, numPagesRef.current || 1));
+
             if (!isNaN(newPage) && newPage !== currentPageRef.current) {
                 isInternalPageUpdate.current = true;
                 setCurrentPage(newPage);
             }
         },
-        [numPages, setCurrentPage]
+        [setCurrentPage]
     );
 
-    // Keep targetScrollTopRef in sync with manual scrolling (mouse wheel, etc.)
+    // Track scroll changes for sync trigger
     const onScroll = useCallback(
         (props: any) => {
             const offset = props?.scrollOffset ?? props?.target?.scrollTop ?? props?.scrollTop;
             if (typeof offset === 'number') {
                 updatePageFromScroll(offset);
-                // Also update targetScrollTopRef so next j/k starts from here
                 if (activeKeys.current.size === 0) {
                     targetScrollTopRef.current = offset;
+                    setLastSyncScroll(offset);
                 }
             }
         },
@@ -557,7 +629,7 @@ export default function PDFReader({ file }: PDFReaderProps) {
             const viewportHeight = listRef.current.element.clientHeight;
             if (viewportHeight <= 0) return; // Wait for layout
 
-            // Document boundaries (without showing void excessively)
+            // Document boundaries in logical pixels
             const docTop = currentItemHeight;
             const docBottom = (currentNumPages + 1) * currentItemHeight - viewportHeight;
 
@@ -621,17 +693,23 @@ export default function PDFReader({ file }: PDFReaderProps) {
             if (e.ctrlKey && !e.metaKey && (e.key === 'o' || e.key === 'i')) {
                 e.preventDefault();
                 e.stopPropagation();
-                if (e.key === 'o') {
-                    const targetPage = goBackInHistory();
-                    if (targetPage) {
-                        isInternalPageUpdate.current = false;
-                        setCurrentPage(targetPage);
+
+                const historyItem = e.key === 'o' ? goBackInHistory() : goForwardInHistory();
+
+                if (historyItem) {
+                    const pageChanged = historyItem.page !== currentPageRef.current;
+                    if (pageChanged) {
+                        isInternalPageUpdate.current = true; // Bypass generic scroll effects
                     }
-                } else {
-                    const targetPage = goForwardInHistory();
-                    if (targetPage) {
-                        isInternalPageUpdate.current = false;
-                        setCurrentPage(targetPage);
+                    setCurrentPage(historyItem.page);
+
+                    // Restoration of exact scroll top
+                    if (listRef.current?.element) {
+                        listRef.current.element.scrollTo({
+                            top: historyItem.scrollTop,
+                            behavior: 'instant',
+                        });
+                        targetScrollTopRef.current = historyItem.scrollTop;
                     }
                 }
             }
@@ -662,8 +740,20 @@ export default function PDFReader({ file }: PDFReaderProps) {
                     if (focusMode === 'outline' && flatOutline.length > 0) {
                         setSelectedPath(flatOutline[0].path);
                     } else if (listRef.current) {
-                        addToHistory(currentPageRef.current);
+                        const currentScroll = listRef.current.element.scrollTop;
+                        addToHistory(currentPageRef.current, currentScroll);
+                        isInternalPageUpdate.current = true;
                         setCurrentPage(1);
+                        const logicalItemHeight = baseHeightRef.current * scaleRef.current + 24;
+                        const targetScroll = logicalItemHeight;
+                        addToHistory(1, targetScroll);
+
+                        listRef.current.element.scrollTo({
+                            top: targetScroll,
+                            behavior: 'instant',
+                        });
+                        targetScrollTopRef.current = targetScroll;
+                        updateProgress(1, targetScroll);
                     }
                     setPendingCommand(null);
                     return;
@@ -726,9 +816,22 @@ export default function PDFReader({ file }: PDFReaderProps) {
                 e.preventDefault();
                 if (focusMode === 'outline' && flatOutline.length > 0) {
                     setSelectedPath(flatOutline[flatOutline.length - 1].path);
-                } else if (listRef.current && numPages) {
-                    addToHistory(currentPageRef.current);
-                    setCurrentPage(numPages);
+                } else if (listRef.current && typeof numPagesRef.current === 'number') {
+                    const currentScroll = listRef.current.element.scrollTop;
+                    addToHistory(currentPageRef.current, currentScroll);
+                    const targetPage = numPagesRef.current;
+                    isInternalPageUpdate.current = true;
+                    setCurrentPage(targetPage);
+                    const logicalItemHeight = baseHeightRef.current * scaleRef.current + 24;
+                    const targetScroll = targetPage * logicalItemHeight;
+                    addToHistory(targetPage, targetScroll);
+
+                    listRef.current.element.scrollTo({
+                        top: targetScroll,
+                        behavior: 'instant',
+                    });
+                    targetScrollTopRef.current = targetScroll;
+                    updateProgress(targetPage, targetScroll);
                 }
                 return;
             }
@@ -774,7 +877,8 @@ export default function PDFReader({ file }: PDFReaderProps) {
                     if (currentIndex >= 0) {
                         const item = flatOutline[currentIndex];
                         if (item.dest) {
-                            addToHistory(currentPageRef.current);
+                            const currentScroll = listRef.current?.element?.scrollTop || 0;
+                            addToHistory(currentPageRef.current, currentScroll);
                             jumpToDestination(item.dest);
                         }
                     }
@@ -1070,6 +1174,7 @@ export default function PDFReader({ file }: PDFReaderProps) {
                 >
                     <AutoSizer>
                         {({ height, width }) => {
+                            if (!height || !width || isNaN(height) || isNaN(width)) return null;
                             // ULTRA-WIDE LOGICAL PLANE:
                             // Fixed large width (3000px) as the logical layout plane for horizontal stability.
                             const logicalWidth = 3000;
@@ -1081,12 +1186,23 @@ export default function PDFReader({ file }: PDFReaderProps) {
                             // 1. Calculate ratios for both states
 
                             const getRatio = (isSidebarOpen: boolean) => {
-                                if (fitMode === 'absolute' || !baseWidth || !baseHeight)
-                                    return visualScale / renderScale;
+                                if (
+                                    fitMode === 'absolute' ||
+                                    !baseWidth ||
+                                    !baseHeight ||
+                                    !renderScale
+                                )
+                                    return (visualScale || 1.2) / (renderScale || 1.5);
+
                                 const currentAvailableWidth = isSidebarOpen
-                                    ? windowWidth - 320
-                                    : windowWidth;
-                                return (currentAvailableWidth * fitRatio) / baseWidth / renderScale;
+                                    ? Math.max(100, windowWidth - 320)
+                                    : Math.max(100, windowWidth);
+
+                                const ratio =
+                                    (currentAvailableWidth * (fitRatio || 0.9)) /
+                                    (baseWidth || 1) /
+                                    (renderScale || 1.5);
+                                return Math.max(0.01, ratio);
                             };
 
                             const ratioOpen = getRatio(true);
@@ -1094,12 +1210,15 @@ export default function PDFReader({ file }: PDFReaderProps) {
 
                             // 2. During transition, use the logical height that corresponds to the SMALLEST ratio
                             // (which is the LARGEST logical height). This ensures full coverage.
-                            const transitionHeight = height / Math.min(ratioOpen, ratioClosed);
-                            const nominalHeight = height / transformRatio;
+                            const safeMinRatio = Math.max(0.01, Math.min(ratioOpen, ratioClosed));
+                            const transitionHeight = height / safeMinRatio;
+                            const nominalHeight = height / (transformRatio || 1);
 
-                            const logicalHeight = isZoomTransitioning
+                            let logicalHeight = isZoomTransitioning
                                 ? transitionHeight
                                 : nominalHeight;
+
+                            if (isNaN(logicalHeight)) logicalHeight = height;
 
                             return (
                                 <div

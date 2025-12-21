@@ -18,8 +18,21 @@ interface PDFState {
     theme: 'light' | 'dark';
     fitMode: 'absolute' | 'relative';
     fitRatio: number; // For relative mode (e.g. 0.9 for 90%)
-    jumpHistory: number[];
+    jumpHistory: { page: number; scrollTop: number }[];
     historyIndex: number;
+    fileProgress: Record<
+        string,
+        {
+            page: number;
+            scrollTop: number;
+            renderScale: number;
+            visualScale: number;
+            fitMode: 'absolute' | 'relative';
+            fitRatio: number;
+            jumpHistory: { page: number; scrollTop: number }[];
+            historyIndex: number;
+        }
+    >;
     recentFiles: File[];
     recentFileNames: string[]; // For persistence
     finderOpen: boolean;
@@ -55,9 +68,9 @@ interface PDFState {
     setModeRelative: (val?: number) => void;
 
     // History Actions
-    addToHistory: (page: number) => void;
-    goBackInHistory: () => number | null;
-    goForwardInHistory: () => number | null;
+    addToHistory: (page: number, scrollTop: number) => void;
+    goBackInHistory: () => { page: number; scrollTop: number } | null;
+    goForwardInHistory: () => { page: number; scrollTop: number } | null;
 
     // Recent Files & Finder
     addToRecentFiles: (file: File) => void;
@@ -68,6 +81,7 @@ interface PDFState {
     // Actions for zoom (modify visualScale only, no re-render)
     zoomIn: () => void;
     zoomOut: () => void;
+    updateProgress: (page: number, scrollTop: number) => void;
 }
 
 export const usePDFStore = create<PDFState>()(
@@ -92,6 +106,7 @@ export const usePDFStore = create<PDFState>()(
             fitRatio: 0.9,
             jumpHistory: [],
             historyIndex: -1,
+            fileProgress: {},
             recentFiles: [],
             recentFileNames: [],
             finderOpen: false,
@@ -102,21 +117,78 @@ export const usePDFStore = create<PDFState>()(
 
             setFile: (file) =>
                 set((state) => {
+                    const fileName = file ? (typeof file === 'string' ? file : file.name) : null;
+                    const lastFileName = state.recentFileNames[0];
+                    const isSameFile =
+                        file && state.recentFileNames.length > 0 && fileName === lastFileName;
+
+                    const updatedProgress = { ...state.fileProgress };
+                    let updatedFiles = state.recentFiles;
+                    let updatedNames = state.recentFileNames;
+
                     if (file && file instanceof File) {
-                        state.addToRecentFiles(file);
+                        saveFileToIdb(file);
+                        updatedFiles = [
+                            file,
+                            ...state.recentFiles.filter((f) => f.name !== file.name),
+                        ].slice(0, 10);
+                        updatedNames = [
+                            file.name,
+                            ...state.recentFileNames.filter((n) => n !== file.name),
+                        ].slice(0, 10);
+                    } else if (typeof file === 'string') {
+                        updatedNames = [
+                            file,
+                            ...state.recentFileNames.filter((n) => n !== file),
+                        ].slice(0, 10);
                     }
+
+                    // Look up new file's progress
+                    const restoredProgress = fileName ? updatedProgress[fileName] : null;
+
                     return {
                         file,
-                        currentPage: 1,
-                        numPages: null,
-                        jumpHistory: [],
-                        historyIndex: -1,
-                        selectedPath: null,
-                        expandedPaths: new Set<string>(),
+                        fileProgress: updatedProgress, // Use existing progress, don't overwrite with stale data
+                        recentFiles: updatedFiles,
+                        recentFileNames: updatedNames,
+                        currentPage: restoredProgress
+                            ? Math.max(1, restoredProgress.page)
+                            : isSameFile
+                              ? state.currentPage
+                              : 1,
+                        renderScale:
+                            restoredProgress?.renderScale && !isNaN(restoredProgress.renderScale)
+                                ? restoredProgress.renderScale
+                                : state.renderScale || 1.5,
+                        visualScale:
+                            restoredProgress?.visualScale && !isNaN(restoredProgress.visualScale)
+                                ? restoredProgress.visualScale
+                                : state.visualScale || 1.2,
+                        fitMode: restoredProgress ? restoredProgress.fitMode : state.fitMode,
+                        fitRatio:
+                            restoredProgress?.fitRatio && !isNaN(restoredProgress.fitRatio)
+                                ? restoredProgress.fitRatio
+                                : state.fitRatio || 0.9,
+                        numPages: isSameFile ? state.numPages : null,
+                        jumpHistory: restoredProgress
+                            ? restoredProgress.jumpHistory
+                            : isSameFile
+                              ? state.jumpHistory
+                              : [],
+                        historyIndex: restoredProgress
+                            ? restoredProgress.historyIndex
+                            : isSameFile
+                              ? state.historyIndex
+                              : -1,
+                        selectedPath: isSameFile ? state.selectedPath : null,
+                        expandedPaths: isSameFile ? state.expandedPaths : new Set<string>(),
                     };
                 }),
             setNumPages: (numPages) => set({ numPages }),
-            setCurrentPage: (currentPage) => set({ currentPage }),
+            setCurrentPage: (currentPage) =>
+                set((state) => ({
+                    currentPage: Math.max(1, Math.min(currentPage, state.numPages || currentPage)),
+                })),
             setRenderScale: (renderScale: number) => set({ renderScale }),
             setVisualScale: (visualScale: number) => set({ visualScale }),
             setRotation: (rotation) => set({ rotation }),
@@ -147,24 +219,26 @@ export const usePDFStore = create<PDFState>()(
             setFitMode: (mode) => set({ fitMode: mode }),
             setFitRatio: (ratio) => set({ fitRatio: ratio }),
 
-            addToHistory: (page) =>
+            addToHistory: (page, scrollTop) =>
                 set((state) => {
                     const currentHistory = state.jumpHistory;
                     const currentIndex = state.historyIndex;
+                    const newItem = { page, scrollTop };
 
                     // If we are navigating in the middle, truncate the "future"
                     // But keep current item if we're moving past it
                     const newHistory = currentHistory.slice(0, currentIndex + 1);
 
                     // Avoid consecutive duplicates
-                    if (newHistory.length > 0 && newHistory[newHistory.length - 1] === page) {
-                        // If we are at the end already, just return
-                        if (currentIndex === currentHistory.length - 1) return state;
-                        // Otherwise move index to the match
-                        return { historyIndex: newHistory.length - 1 };
+                    if (newHistory.length > 0) {
+                        const last = newHistory[newHistory.length - 1];
+                        if (last.page === page && Math.abs(last.scrollTop - scrollTop) < 50) {
+                            if (currentIndex === currentHistory.length - 1) return state;
+                            return { historyIndex: newHistory.length - 1 };
+                        }
                     }
 
-                    const updatedHistory = [...newHistory, page];
+                    const updatedHistory = [...newHistory, newItem];
                     if (updatedHistory.length > 50) {
                         updatedHistory.shift();
                     }
@@ -176,42 +250,43 @@ export const usePDFStore = create<PDFState>()(
                 }),
 
             goBackInHistory: () => {
-                let page: number | null = null;
+                let item: { page: number; scrollTop: number } | null = null;
                 set((state) => {
                     if (state.historyIndex > 0) {
                         const newIndex = state.historyIndex - 1;
-                        page = state.jumpHistory[newIndex];
+                        item = state.jumpHistory[newIndex];
                         return { historyIndex: newIndex };
                     }
                     return state;
                 });
-                return page;
+                return item;
             },
 
             goForwardInHistory: () => {
-                let page: number | null = null;
+                let item: { page: number; scrollTop: number } | null = null;
                 set((state) => {
                     if (state.historyIndex < state.jumpHistory.length - 1) {
                         const newIndex = state.historyIndex + 1;
-                        page = state.jumpHistory[newIndex];
+                        item = state.jumpHistory[newIndex];
                         return { historyIndex: newIndex };
                     }
                     return state;
                 });
-                return page;
+                return item;
             },
 
             addToRecentFiles: (file) => {
                 saveFileToIdb(file); // Fire and forget save to IDB
 
                 set((state) => {
-                    const currentFiles = state.recentFiles;
-                    const filteredFiles = currentFiles.filter((f) => f.name !== file.name);
-                    const updatedFiles = [file, ...filteredFiles].slice(0, 10);
-
-                    const currentNames = state.recentFileNames;
-                    const filteredNames = currentNames.filter((n) => n !== file.name);
-                    const updatedNames = [file.name, ...filteredNames].slice(0, 10);
+                    const updatedFiles = [
+                        file,
+                        ...state.recentFiles.filter((f) => f.name !== file.name),
+                    ].slice(0, 10);
+                    const updatedNames = [
+                        file.name,
+                        ...state.recentFileNames.filter((n) => n !== file.name),
+                    ].slice(0, 10);
 
                     return {
                         recentFiles: updatedFiles,
@@ -283,6 +358,40 @@ export const usePDFStore = create<PDFState>()(
                         (state.visualScale * (state.baseWidth || 1)) / (state.availableWidth || 1);
                     return { fitMode: 'relative', fitRatio: currentRatio };
                 }),
+
+            updateProgress: (page, scrollTop) =>
+                set((state) => {
+                    const fileName = state.recentFileNames[0];
+                    const safePage = Math.max(1, page);
+                    if (!fileName) return { currentPage: safePage };
+
+                    const updatedProgress = { ...state.fileProgress };
+                    const lastProgress = updatedProgress[fileName];
+
+                    updatedProgress[fileName] = {
+                        page: safePage,
+                        scrollTop: !isNaN(scrollTop) ? scrollTop : lastProgress?.scrollTop || 0,
+                        renderScale:
+                            state.renderScale && !isNaN(state.renderScale)
+                                ? state.renderScale
+                                : lastProgress?.renderScale || 1.5,
+                        visualScale:
+                            state.visualScale && !isNaN(state.visualScale)
+                                ? state.visualScale
+                                : lastProgress?.visualScale || 1.2,
+                        fitMode: state.fitMode || lastProgress?.fitMode || 'relative',
+                        fitRatio:
+                            state.fitRatio && !isNaN(state.fitRatio)
+                                ? state.fitRatio
+                                : lastProgress?.fitRatio || 0.9,
+                        jumpHistory: state.jumpHistory,
+                        historyIndex: state.historyIndex,
+                    };
+                    return {
+                        currentPage: safePage,
+                        fileProgress: updatedProgress,
+                    };
+                }),
         }),
         {
             name: 'suzume-storage',
@@ -302,6 +411,13 @@ export const usePDFStore = create<PDFState>()(
                 theme: state.theme,
                 fitMode: state.fitMode,
                 fitRatio: state.fitRatio,
+                renderScale: state.renderScale,
+                visualScale: state.visualScale,
+                rotation: state.rotation,
+                jumpHistory: state.jumpHistory,
+                historyIndex: state.historyIndex,
+                currentPage: state.currentPage,
+                fileProgress: state.fileProgress,
             }),
             skipHydration: true, // Crucial for Next.js to avoid hydration errors & SSR storage access
         }
