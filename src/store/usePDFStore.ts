@@ -103,10 +103,17 @@ export const usePDFStore = create<PDFState>()(
             setFile: (file) =>
                 set((state) => {
                     if (file && file instanceof File) {
-                        // Add to recent files
                         state.addToRecentFiles(file);
                     }
-                    return { file, currentPage: 1, jumpHistory: [], historyIndex: -1 };
+                    return {
+                        file,
+                        currentPage: 1,
+                        numPages: null,
+                        jumpHistory: [],
+                        historyIndex: -1,
+                        selectedPath: null,
+                        expandedPaths: new Set<string>(),
+                    };
                 }),
             setNumPages: (numPages) => set({ numPages }),
             setCurrentPage: (currentPage) => set({ currentPage }),

@@ -108,73 +108,56 @@ export default function Home() {
                         </div>
 
                         {/* Shortcuts / Footer */}
-                        <div className="flex gap-8 text-xs mt-8 opacity-60 hover:opacity-100 transition-opacity duration-300">
-                            <div
-                                className={clsx(
-                                    'flex items-center gap-2',
-                                    theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
-                                )}
-                            >
-                                <Keyboard size={14} />
-                                <span>
-                                    Press{' '}
-                                    <kbd
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-12 w-full max-w-3xl px-6">
+                            {[
+                                { key: 'o', label: 'Open File', icon: <Keyboard size={18} /> },
+                                { key: 'r', label: 'Recent Files', icon: <FileUp size={18} /> },
+                                { key: ':', label: 'Commands', icon: <Command size={18} /> },
+                                { key: '?', label: 'Get Help', icon: <HelpCircle size={18} /> },
+                            ].map((item) => (
+                                <div
+                                    key={item.key}
+                                    className={clsx(
+                                        'group flex flex-col items-center justify-center p-5 rounded-2xl border transition-all duration-300',
+                                        theme === 'dark'
+                                            ? 'bg-white/[0.03] border-white/10 hover:bg-white/[0.06] hover:border-blue-500/30 hover:shadow-[0_0_20px_rgba(59,130,246,0.1)]'
+                                            : 'bg-white border-gray-200 shadow-sm hover:shadow-md hover:border-blue-400 hover:-translate-y-1'
+                                    )}
+                                >
+                                    <div
                                         className={clsx(
-                                            'px-1.5 py-0.5 rounded border font-mono mx-1',
+                                            'mb-3 transition-colors duration-300',
                                             theme === 'dark'
-                                                ? 'bg-[#222] border-[#333] text-gray-300'
-                                                : 'bg-white border-gray-200 text-gray-600 shadow-sm'
+                                                ? 'text-gray-500 group-hover:text-blue-400'
+                                                : 'text-gray-400 group-hover:text-blue-600'
                                         )}
                                     >
-                                        o
-                                    </kbd>{' '}
-                                    to open
-                                </span>
-                            </div>
-                            <div
-                                className={clsx(
-                                    'flex items-center gap-2',
-                                    theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
-                                )}
-                            >
-                                <Command size={14} />
-                                <span>
-                                    Press{' '}
-                                    <kbd
+                                        {item.icon}
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                        <kbd
+                                            className={clsx(
+                                                'px-2 py-0.5 rounded border font-mono text-sm transition-all duration-300',
+                                                theme === 'dark'
+                                                    ? 'bg-[#222] border-[#333] text-gray-300 group-hover:border-blue-500/50 group-hover:text-white'
+                                                    : 'bg-gray-50 border-gray-200 text-gray-600 group-hover:border-blue-200 group-hover:text-blue-600'
+                                            )}
+                                        >
+                                            {item.key}
+                                        </kbd>
+                                    </div>
+                                    <span
                                         className={clsx(
-                                            'px-1.5 py-0.5 rounded border font-mono mx-1',
+                                            'text-[10px] uppercase tracking-widest mt-3 font-semibold transition-colors duration-300',
                                             theme === 'dark'
-                                                ? 'bg-[#222] border-[#333] text-gray-300'
-                                                : 'bg-white border-gray-200 text-gray-600 shadow-sm'
+                                                ? 'text-gray-500 group-hover:text-gray-300'
+                                                : 'text-gray-400 group-hover:text-gray-700'
                                         )}
                                     >
-                                        :
-                                    </kbd>{' '}
-                                    to command
-                                </span>
-                            </div>
-                            <div
-                                className={clsx(
-                                    'flex items-center gap-2',
-                                    theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
-                                )}
-                            >
-                                <HelpCircle size={14} />
-                                <span>
-                                    Press{' '}
-                                    <kbd
-                                        className={clsx(
-                                            'px-1.5 py-0.5 rounded border font-mono mx-1',
-                                            theme === 'dark'
-                                                ? 'bg-[#222] border-[#333] text-gray-300'
-                                                : 'bg-white border-gray-200 text-gray-600 shadow-sm'
-                                        )}
-                                    >
-                                        ?
-                                    </kbd>{' '}
-                                    for help
-                                </span>
-                            </div>
+                                        {item.label}
+                                    </span>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 ) : (

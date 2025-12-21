@@ -23,16 +23,17 @@ _Keyboard shortcuts reference_
 
 ## ✨ Features
 
-- **vim-like Navigation**: Navigate documents using `j`, `k`, `d`, `u`, `gg`, `G` and more.
-- **Command Mode**: Type `:` to access commands like `:w` (width), `:z` (zoom), and `:dark`.
+- **Vim-like Navigation**: Navigate documents using `j`, `k`, `d`, `u`, `gg`, `G` and more.
+- **Command Mode**: Type `:` to access commands like `:a` (Absolute), `:r` (Relative), and `:dark`.
 - **Keyboard-Driven Outline**: Browse the table of contents, expand/collapse sections (`h`/`l`), and jump to chapters (`Enter`) entirely via keyboard.
 - **Dark Mode**: Built-in optimized dark mode for comfortable late-night reading.
 - **Focus Management**: Toggle focus seamlessly between the PDF content and the Outline sidebar using `Esc`.
 - **Performance**: Virtualized list rendering (via `react-window`) ensures buttery smooth scrolling even for massive PDFs.
-- **Smart Scaling**:
-    - `:w [num]` - Fit width (e.g., `:w 80` for 80%).
-    - `:z [num]` - Custom zoom level.
-    - `:fit` - Fit whole page.
+- **Absolute & Relative Viewing**:
+    - `:a [num]` - Absolute zoom level (e.g., `:a 150` for 150%).
+    - `:r [num]` - Relative width fitting (e.g., `:r 90` for 90% page width).
+    - `:fw` - Fit Width (100% Relative).
+    - `:fp` - Fit Page (Calculated Absolute to fit entire page).
 
 ## 🚀 Getting Started
 
@@ -70,37 +71,36 @@ Press `?` in the app to view the full help menu.
 
 ### Navigation (PDF)
 
-| Key                | Action                                |
-| :----------------- | :------------------------------------ |
-| `j` / `k`          | Scroll Down / Up                      |
-| `d` / `u`          | Fast Scroll Down / Up                 |
-| `h` / `l`          | Previous / Next Page                  |
-| `ctrl + o`         | Jump Back in History                  |
-| `ctrl + i`         | Jump Forward in History               |
-| `gg` / `G`         | Go to First / Last Page               |
-| `:[num]`           | Jump to Page (e.g. `:10`)             |
-| `zz` / `zt` / `zb` | View Position (Center / Top / Bottom) |
+| Key        | Action                    |
+| :--------- | :------------------------ |
+| `j` / `k`  | Scroll Down / Up          |
+| `d` / `u`  | Fast Scroll Down / Up     |
+| `h` / `l`  | Previous / Next Page      |
+| `ctrl + o` | Jump Back in History      |
+| `ctrl + i` | Jump Forward in History   |
+| `gg` / `G` | Go to First / Last Page   |
+| `zz`       | Center Current Page View  |
+| `:[num]`   | Jump to Page (e.g. `:10`) |
 
-### View Control
+| Command            | Description                         |
+| :----------------- | :---------------------------------- |
+| `a`                | Toggle Absolute / Relative Mode     |
+| `:a [num]`         | Set Absolute Zoom % (e.g. `:a 150`) |
+| `:r [num]`         | Set Relative Width % (e.g. `:r 90`) |
+| `:fw`              | Fit Width (100% Relative)           |
+| `:fp`              | Fit Page (Calculated Absolute)      |
+| `+` / `-`          | In-mode Zoom In / Out               |
+| `:fs`              | Toggle Fullscreen                   |
+| `:dark` / `:light` | Switch Theme (Dark / Light)         |
 
-| Command            | Description                                |
-| :----------------- | :----------------------------------------- |
-| `:w [num]`         | Fit Width (default 90%). Example: `:w 100` |
-| `:z [num]`         | Set Zoom %. Example: `:z 150`              |
-| `+` / `-`          | Quick Zoom In / Out                        |
-| `:fit`             | Fit Whole Page                             |
-| `:fs`              | Toggle Fullscreen                          |
-| `:dark` / `:light` | Switch Theme (Dark / Light)                |
-
-### Outline / Interaction
-
-| Key       | Action                                    |
-| :-------- | :---------------------------------------- |
-| `t`       | Toggle Sidebar Visibility                 |
-| `Esc`     | Toggle Focus (PDF ↔ Outline) / Close Help |
-| `j` / `k` | Navigate Outline Items                    |
-| `l` / `h` | Expand / Collapse Folder                  |
-| `Enter`   | Select & Jump to Chapter                  |
+| Key       | Action                             |
+| :-------- | :--------------------------------- |
+| `t`       | Toggle Sidebar Visibility          |
+| `Esc`     | Focus Outline (from PDF)           |
+| `j` / `k` | Navigate Outline Items             |
+| `l` / `h` | Expand / Collapse Item             |
+| `Enter`   | Select & Jump to Chapter           |
+| `Esc`     | Return Focus to PDF (from Outline) |
 
 ### General
 

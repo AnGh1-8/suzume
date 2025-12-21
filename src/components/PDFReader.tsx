@@ -318,6 +318,8 @@ export default function PDFReader({ file }: PDFReaderProps) {
         setFitMode('relative');
         setFitRatio(0.9);
         setFocusMode('pdf');
+        setRawOutline([]);
+        setOutlineWithPages([]);
     }, [file, setFitMode, setFitRatio, setFocusMode]);
 
     async function onDocumentLoadSuccess(pdf: any) {
@@ -349,31 +351,49 @@ export default function PDFReader({ file }: PDFReaderProps) {
             return;
         }
 
+        let active = true;
+
         const resolvePageNumbers = async (items: any[]): Promise<any[]> => {
-            const result = [];
-            for (const item of items) {
-                let pageNumber = 0;
-                try {
-                    let dest = item.dest;
-                    if (typeof dest === 'string') {
-                        dest = await pdfDocument.getDestination(dest);
+            // Use Promise.all to resolve sibling items in parallel for major speedup
+            const resolvedItems = await Promise.all(
+                items.map(async (item) => {
+                    let pageNumber = 0;
+                    try {
+                        let dest = item.dest;
+                        if (typeof dest === 'string') {
+                            dest = await pdfDocument.getDestination(dest);
+                        }
+                        if (Array.isArray(dest) && dest.length > 0) {
+                            // dest[0] is typically a reference to the page object
+                            // but some PDFs might have the index directly
+                            pageNumber = (await pdfDocument.getPageIndex(dest[0])) + 1;
+                        }
+                    } catch (e) {
+                        // Suppress individual resolution errors to prevent blocking the entire tree
                     }
-                    if (dest && dest[0]) {
-                        pageNumber = (await pdfDocument.getPageIndex(dest[0])) + 1;
-                    }
-                } catch (e) {}
-                const children =
-                    item.items && item.items.length > 0 ? await resolvePageNumbers(item.items) : [];
-                result.push({
-                    title: item.title,
-                    pageNumber,
-                    items: children,
-                });
-            }
-            return result;
+
+                    const children =
+                        item.items && item.items.length > 0
+                            ? await resolvePageNumbers(item.items)
+                            : [];
+
+                    return {
+                        title: item.title,
+                        pageNumber,
+                        items: children,
+                    };
+                })
+            );
+            return resolvedItems;
         };
 
-        resolvePageNumbers(outline).then(setOutlineWithPages);
+        resolvePageNumbers(outline).then((result) => {
+            if (active) setOutlineWithPages(result);
+        });
+
+        return () => {
+            active = false;
+        };
     }, [pdfDocument, outline]);
 
     const scaleRef = useRef(renderScale);
@@ -818,17 +838,17 @@ export default function PDFReader({ file }: PDFReaderProps) {
                             : 'border-gray-200 bg-white shadow-sm'
                     )}
                 >
-                    {/* Left Group: Menu + Breadcrumb - Translatable */}
+                    {/* Left Group: Menu + Breadcrumb - Shifted when sidebar open */}
                     <div
                         className={clsx(
-                            'flex items-center space-x-4 transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] max-w-full',
-                            sidebarOpen ? 'translate-x-80' : 'translate-x-0'
+                            'flex items-center space-x-4 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] min-w-0 flex-1',
+                            sidebarOpen ? 'pl-80' : 'pl-0'
                         )}
                     >
                         <button
                             onClick={toggleSidebar}
                             className={clsx(
-                                'transition-opacity duration-300',
+                                'transition-opacity duration-300 shrink-0',
                                 sidebarOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'
                             )}
                         >
