@@ -221,6 +221,7 @@ export const usePDFStore = create<PDFState>()(
                               : -1,
                         selectedPath: isSameFile ? state.selectedPath : null,
                         expandedPaths: isSameFile ? state.expandedPaths : new Set<string>(),
+                        focusMode: isSameFile ? state.focusMode : 'pdf',
                     };
                 }),
             setNumPages: (numPages) => set({ numPages }),
