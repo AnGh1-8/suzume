@@ -42,7 +42,7 @@ export default function GlobalShell({ children }: { children: React.ReactNode })
     };
 
     useKey(
-        (e) => true,
+        () => true,
         (e) => {
             if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
 

@@ -91,18 +91,11 @@ export default function PDFReader({ file }: PDFReaderProps) {
         theme,
         fitMode,
         fitRatio,
-        setFitMode,
-        setFitRatio,
-        setVisualScale,
         addToHistory,
         goBackInHistory,
         goForwardInHistory,
         helpOpen,
         toggleHelp,
-        rotation,
-        setRenderScale,
-        setModeAbsolute,
-        setModeRelative,
         toggleMode,
         setBaseWidth: setBaseWidthStore,
         setBaseHeight: setBaseHeightStore,
@@ -121,8 +114,7 @@ export default function PDFReader({ file }: PDFReaderProps) {
 
     const listRef = useRef<any>(null);
     const sidebarScrollRef = useRef<HTMLDivElement>(null);
-    const { width: windowWidth, height: windowHeight } = useWindowSize(); // Clean usage
-    const windowScale = { width: windowWidth, height: windowHeight }; // Mock obj for dependency array if needed or just use vars
+    const { width: windowWidth, height: windowHeight } = useWindowSize();
 
     // Raw Outline from react-pdf
     const [outline, setRawOutline] = useState<any[]>([]);
@@ -168,27 +160,6 @@ export default function PDFReader({ file }: PDFReaderProps) {
     };
 
     const flatOutline = flattenOutline(outline || []);
-
-    // Outline Item Click
-    function onOutlineItemClick(item: FlatOutlineItem) {
-        setSelectedPath(item.path);
-        // Navigate PDF logic
-        // Need to resolve dest to pageNumber. react-pdf typically gives dest array.
-        // For simplicity, we assume simple page usage or handle dest later.
-        // Usually: pdf.getDestination(dest).then(...)
-        // But react-pdf outline "dest" can be string or array.
-        // This is complex. For now, let's assume we can map dest...
-        // Wait, current implementation uses recursive outline which passes "dest" to onItemClick.
-        // Then previous implementation used "listRef.current.scrollToRow(pageNumber - 1)".
-        // THIS IS MISSING. I need to map "dest" to "pageIndex".
-        // react-pdf Document has "onLoadSuccess(pdf)". We can access `pdf` instance?
-        // Let's store pdf instance? Or use a helper.
-        // Reverting to simplistic behavior: IF dest is page index (some PDFs), otherwise log warning.
-        // A better way for Outline click is just to set focus.
-        // Real implementation of PDF destination is async.
-        // For the sake of this task (UI/Vim), let's implement basic selection update.
-        // The user didn't complain about dead links, but "browse directory".
-    }
 
     // Since mapping Dest to Page is async and hard without pdf instance reference,
     // we will rely on react-pdf's internal link handling if possible, OR
@@ -433,7 +404,7 @@ export default function PDFReader({ file }: PDFReaderProps) {
                             // but some PDFs might have the index directly
                             pageNumber = (await pdfDocument.getPageIndex(dest[0])) + 1;
                         }
-                    } catch (e) {
+                    } catch {
                         // Suppress individual resolution errors to prevent blocking the entire tree
                     }
 
@@ -467,7 +438,6 @@ export default function PDFReader({ file }: PDFReaderProps) {
     const numPagesRef = useRef(numPages);
     const targetScrollTopRef = useRef<number>(0);
     const isInternalPageUpdate = useRef(false);
-    const transformRatioRef = useRef(1);
 
     // Sync refs
     useEffect(() => {
@@ -773,7 +743,6 @@ export default function PDFReader({ file }: PDFReaderProps) {
                         addToHistory(currentPageRef.current, currentScroll);
                         isInternalPageUpdate.current = true;
                         setCurrentPage(1);
-                        const logicalItemHeight = baseHeightRef.current * scaleRef.current + 24;
                         const targetScroll = 0; // Page 1 top
                         addToHistory(1, targetScroll);
 

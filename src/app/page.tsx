@@ -21,7 +21,7 @@ export default function Home() {
     // For now, we'll implement a file picker or just a placeholder if no file.
     // We'll start with a file picker and a drop zone.
 
-    const { file, setFile, theme } = usePDFStore();
+    const { file, theme } = usePDFStore();
 
     // Set html/body theme
     // Actually GlobalShell doesn't handle body bg, so main must handle it.

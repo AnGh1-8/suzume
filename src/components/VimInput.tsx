@@ -13,9 +13,6 @@ export default function VimInput() {
     const {
         setTheme,
         theme,
-        setFitMode,
-        setVisualScale,
-        setFitRatio,
         setModeAbsolute,
         setModeRelative,
         setCurrentPage,
@@ -26,9 +23,6 @@ export default function VimInput() {
         availableWidth,
         availableHeight,
         renderScale,
-        fitMode,
-        visualScale,
-        fitRatio,
         currentScrollTop,
     } = usePDFStore();
 

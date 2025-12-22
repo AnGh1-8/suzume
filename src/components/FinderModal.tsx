@@ -4,7 +4,6 @@ import { FileText, Search, CornerDownLeft } from 'lucide-react';
 import { usePDFStore } from '@/store/usePDFStore';
 import { useState, useMemo, useEffect, useRef, useLayoutEffect } from 'react';
 import clsx from 'clsx';
-import { useKey } from 'react-use';
 
 export default function FinderModal() {
     const { finderOpen, setFinderOpen, recentFiles, setFile, theme } = usePDFStore();
