@@ -1249,6 +1249,37 @@ export default function PDFReader({ file }: PDFReaderProps) {
                                         <Document
                                             file={file}
                                             onLoadSuccess={onDocumentLoadSuccess}
+                                            externalLinkTarget="_blank"
+                                            onItemClick={({ pageNumber, dest }) => {
+                                                // Use pageNumber directly since react-pdf has already resolved it
+                                                if (pageNumber) {
+                                                    const currentScroll =
+                                                        listRef.current?.element?.scrollTop || 0;
+                                                    addToHistory(
+                                                        currentPageRef.current,
+                                                        currentScroll
+                                                    );
+                                                    isInternalPageUpdate.current = true;
+                                                    setCurrentPage(pageNumber);
+                                                    const logicalItemHeight =
+                                                        baseHeightRef.current * scaleRef.current +
+                                                        24;
+                                                    const targetScroll =
+                                                        (pageNumber - 1) * logicalItemHeight;
+                                                    addToHistory(pageNumber, targetScroll);
+                                                    if (listRef.current?.element) {
+                                                        listRef.current.element.scrollTo({
+                                                            top: targetScroll,
+                                                            behavior: 'instant',
+                                                        });
+                                                        targetScrollTopRef.current = targetScroll;
+                                                        updateProgress(pageNumber, targetScroll);
+                                                    }
+                                                } else if (dest) {
+                                                    // Fallback: resolve dest if pageNumber is not available
+                                                    jumpToDestination(dest);
+                                                }
+                                            }}
                                             className="flex flex-col items-center"
                                             loading={
                                                 <div
