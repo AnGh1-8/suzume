@@ -372,10 +372,17 @@ export default function PDFReader({ file }: PDFReaderProps) {
             const outline = await pdf.getOutline();
             setRawOutline(outline);
 
-            if (!outline || outline.length === 0) {
-                setSidebarOpen(false);
-            } else {
-                setSidebarOpen(true);
+            // Smart Sidebar Logic:
+            // "If opening a NEW file, open directory if exists, otherwise close it."
+            // We identify a "new" file by checking if it lacks a record in fileProgress.
+            // If it HAS a record, we respect the persisted user preference (do nothing).
+            const fileName = file instanceof File ? file.name : file;
+            if (fileName && !fileProgress[fileName]) {
+                if (!outline || outline.length === 0) {
+                    setSidebarOpen(false);
+                } else {
+                    setSidebarOpen(true);
+                }
             }
             setTimeout(() => {
                 setIsLayoutReady(true);
@@ -535,6 +542,7 @@ export default function PDFReader({ file }: PDFReaderProps) {
         renderScale,
         fitMode,
         fitRatio,
+        sidebarOpen,
     ]);
 
     const updatePageFromScroll = useCallback(

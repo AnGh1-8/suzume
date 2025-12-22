@@ -31,6 +31,7 @@ interface PDFState {
             fitRatio: number;
             jumpHistory: { page: number; scrollTop: number }[];
             historyIndex: number;
+            sidebarOpen: boolean;
         }
     >;
     recentFiles: File[];
@@ -123,6 +124,25 @@ export const usePDFStore = create<PDFState>()(
                         file && state.recentFileNames.length > 0 && fileName === lastFileName;
 
                     const updatedProgress = { ...state.fileProgress };
+
+                    // 1. Snapshot current file's state before switching
+                    // We do this even if isSameFile is true, because we want to capture
+                    // the *very latest* state (e.g. sidebar just toggled) before re-rendering or "re-opening".
+                    if (lastFileName) {
+                        const previousProgress = updatedProgress[lastFileName];
+                        updatedProgress[lastFileName] = {
+                            page: Math.max(1, state.currentPage),
+                            // Preserve scrollTop from last sync (best effort) since we don't have live DOM access here
+                            scrollTop: previousProgress?.scrollTop || 0,
+                            renderScale: state.renderScale,
+                            visualScale: state.visualScale,
+                            fitMode: state.fitMode,
+                            fitRatio: state.fitRatio,
+                            sidebarOpen: state.sidebarOpen,
+                            jumpHistory: state.jumpHistory,
+                            historyIndex: state.historyIndex,
+                        };
+                    }
                     let updatedFiles = state.recentFiles;
                     let updatedNames = state.recentFileNames;
 
@@ -159,16 +179,32 @@ export const usePDFStore = create<PDFState>()(
                         renderScale:
                             restoredProgress?.renderScale && !isNaN(restoredProgress.renderScale)
                                 ? restoredProgress.renderScale
-                                : state.renderScale || 1.5,
+                                : isSameFile
+                                  ? state.renderScale
+                                  : 1.5,
                         visualScale:
                             restoredProgress?.visualScale && !isNaN(restoredProgress.visualScale)
                                 ? restoredProgress.visualScale
-                                : state.visualScale || 1.2,
-                        fitMode: restoredProgress ? restoredProgress.fitMode : state.fitMode,
+                                : isSameFile
+                                  ? state.visualScale
+                                  : 1.2,
+                        fitMode: restoredProgress
+                            ? restoredProgress.fitMode
+                            : isSameFile
+                              ? state.fitMode
+                              : 'relative',
+                        sidebarOpen:
+                            restoredProgress && restoredProgress.sidebarOpen !== undefined
+                                ? restoredProgress.sidebarOpen
+                                : isSameFile
+                                  ? state.sidebarOpen
+                                  : true,
                         fitRatio:
                             restoredProgress?.fitRatio && !isNaN(restoredProgress.fitRatio)
                                 ? restoredProgress.fitRatio
-                                : state.fitRatio || 0.9,
+                                : isSameFile
+                                  ? state.fitRatio
+                                  : 0.9,
                         numPages: isSameFile ? state.numPages : null,
                         jumpHistory: restoredProgress
                             ? restoredProgress.jumpHistory
@@ -386,6 +422,7 @@ export const usePDFStore = create<PDFState>()(
                                 : lastProgress?.fitRatio || 0.9,
                         jumpHistory: state.jumpHistory,
                         historyIndex: state.historyIndex,
+                        sidebarOpen: state.sidebarOpen,
                     };
                     return {
                         currentPage: safePage,
@@ -409,6 +446,7 @@ export const usePDFStore = create<PDFState>()(
             partialize: (state) => ({
                 recentFileNames: state.recentFileNames,
                 theme: state.theme,
+                sidebarOpen: state.sidebarOpen,
                 fitMode: state.fitMode,
                 fitRatio: state.fitRatio,
                 renderScale: state.renderScale,
