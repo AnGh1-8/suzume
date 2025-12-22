@@ -10,7 +10,9 @@ const DB_VERSION = 2;
 export async function saveFileToIdb(file: File) {
     const db = await openDB(DB_NAME, DB_VERSION, {
         upgrade(db) {
-            db.createObjectStore(STORE_NAME);
+            if (!db.objectStoreNames.contains(STORE_NAME)) {
+                db.createObjectStore(STORE_NAME);
+            }
         },
     });
 

@@ -29,6 +29,7 @@ export default function VimInput() {
         fitMode,
         visualScale,
         fitRatio,
+        currentScrollTop,
     } = usePDFStore();
 
     useEffect(() => {
@@ -99,9 +100,7 @@ export default function VimInput() {
                 }
             } else if (['go', 'n'].includes(cmd)) {
                 if (arg && !isNaN(arg) && arg > 0) {
-                    const scrollEl = document.querySelector('.scrollbar-hide.outline-none');
-                    const scrollTop = scrollEl ? (scrollEl as HTMLElement).scrollTop : 0;
-                    addToHistory(currentPage, scrollTop);
+                    addToHistory(currentPage, currentScrollTop);
                     setCurrentPage(arg);
 
                     // Unified logical calculation: targetPage * (baseHeight * renderScale + 24)
@@ -113,9 +112,7 @@ export default function VimInput() {
                 // Handle direct number input (e.g., :42)
                 const pageNum = parseInt(cmd, 10);
                 if (pageNum > 0) {
-                    const scrollEl = document.querySelector('.scrollbar-hide.outline-none');
-                    const scrollTop = scrollEl ? (scrollEl as HTMLElement).scrollTop : 0;
-                    addToHistory(currentPage, scrollTop);
+                    addToHistory(currentPage, currentScrollTop);
                     setCurrentPage(pageNum);
 
                     const logicalItemHeight = baseHeight * renderScale + 24;

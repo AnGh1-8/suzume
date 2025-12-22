@@ -12,28 +12,27 @@ export default function GlobalShell({ children }: { children: React.ReactNode })
         helpOpen,
         toggleHelp,
         sidebarOpen,
-        toggleSidebar,
         focusMode,
         setFocusMode,
         setFile,
         pendingCommand,
         finderOpen,
         toggleFinder,
-        hydrateRecentFiles,
     } = usePDFStore();
 
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // Initial Hydration
+    // Initial Hydration - runs only once on mount
     useEffect(() => {
         const init = async () => {
             // Rehydrate the persisted names/settings from localStorage
             await usePDFStore.persist.rehydrate();
             // Then load the actual file blobs from IndexedDB
-            await hydrateRecentFiles();
+            await usePDFStore.getState().hydrateRecentFiles();
         };
         init();
-    }, [hydrateRecentFiles]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const handleOpenFile = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];

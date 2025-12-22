@@ -1,14 +1,29 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback, useLayoutEffect, useMemo } from 'react';
+import { useEffect, useRef, useState, useCallback, useLayoutEffect, useMemo, memo } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 // @ts-ignore
 import { List } from 'react-window';
 import AutoSizer from 'react-virtualized-auto-sizer';
+import { usePDFStore } from '@/store/usePDFStore';
+import { useWindowSize, useKey } from 'react-use';
+import { ChevronRight, Menu, X, HelpCircle } from 'lucide-react';
+import PDFOutline, { FlatOutlineItem } from './PDFOutline';
+import clsx from 'clsx';
+import 'react-pdf/dist/Page/AnnotationLayer.css';
+import 'react-pdf/dist/Page/TextLayer.css';
 
-import React, { memo } from 'react';
+// Configure PDF.js worker
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
-const Row = memo(({ index, style, renderScale, theme, numPages }: any) => {
+interface RowProps {
+    index: number;
+    style: React.CSSProperties;
+    renderScale: number;
+    theme: 'light' | 'dark';
+}
+
+const Row = memo(({ index, style, renderScale, theme }: RowProps) => {
     return (
         <div
             style={{
@@ -49,17 +64,6 @@ const Row = memo(({ index, style, renderScale, theme, numPages }: any) => {
     );
 });
 Row.displayName = 'PDFRow';
-
-import { usePDFStore } from '@/store/usePDFStore';
-import { useWindowSize, useKey, useDebounce } from 'react-use';
-import { ChevronRight, ChevronDown, Search, Menu, X, HelpCircle } from 'lucide-react';
-import PDFOutline, { FlatOutlineItem } from './PDFOutline';
-import clsx from 'clsx';
-import 'react-pdf/dist/Page/AnnotationLayer.css';
-import 'react-pdf/dist/Page/TextLayer.css';
-
-// Configure PDF.js worker
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 interface PDFReaderProps {
     file: File | string;
@@ -106,6 +110,7 @@ export default function PDFReader({ file }: PDFReaderProps) {
         setAvailableHeight: setAvailableHeightStore,
         fileProgress,
         updateProgress,
+        setCurrentScrollTop,
     } = usePDFStore();
 
     const hasRestoredPosition = useRef(false);
@@ -191,46 +196,49 @@ export default function PDFReader({ file }: PDFReaderProps) {
     // Actually, I can save the `pdf` object in state to use `getPageIndex`.
     const [pdfDocument, setPdfDocument] = useState<any>(null);
 
-    const jumpToDestination = async (dest: any) => {
-        if (!pdfDocument) return;
-        try {
-            // resolve dest
-            let explicitDest = dest;
-            if (typeof dest === 'string') {
-                explicitDest = await pdfDocument.getDestination(dest);
+    const jumpToDestination = useCallback(
+        async (dest: any) => {
+            if (!pdfDocument) return;
+            try {
+                // resolve dest
+                let explicitDest = dest;
+                if (typeof dest === 'string') {
+                    explicitDest = await pdfDocument.getDestination(dest);
+                }
+                if (!explicitDest) return;
+
+                const pageIndex = await pdfDocument.getPageIndex(explicitDest[0]);
+                const currentScroll = listRef.current?.element?.scrollTop || 0;
+                addToHistory(currentPageRef.current, currentScroll);
+                const targetPage = pageIndex + 1;
+
+                // Bypass snap-to-top for precise destination jumps
+                isInternalPageUpdate.current = true;
+                setCurrentPage(targetPage);
+
+                // Standard logical height jump
+                const logicalItemHeight = baseHeightRef.current * scaleRef.current + 24;
+                const targetScroll = (targetPage - 1) * logicalItemHeight;
+                addToHistory(targetPage, targetScroll);
+
+                if (listRef.current?.element) {
+                    listRef.current.element.scrollTo({
+                        top: targetScroll,
+                        behavior: 'instant',
+                    });
+                    targetScrollTopRef.current = targetScroll;
+                    // Explicitly sync after jump completes
+                    updateProgress(targetPage, targetScroll);
+                    // Return focus to PDF viewer after jump
+                    setFocusMode('pdf');
+                    window.focus();
+                }
+            } catch (e) {
+                console.error('Jump error', e);
             }
-            if (!explicitDest) return;
-
-            const pageIndex = await pdfDocument.getPageIndex(explicitDest[0]);
-            const currentScroll = listRef.current?.element?.scrollTop || 0;
-            addToHistory(currentPageRef.current, currentScroll);
-            const targetPage = pageIndex + 1;
-
-            // Bypass snap-to-top for precise destination jumps
-            isInternalPageUpdate.current = true;
-            setCurrentPage(targetPage);
-
-            // Standard logical height jump
-            const logicalItemHeight = baseHeightRef.current * scaleRef.current + 24;
-            const targetScroll = (targetPage - 1) * logicalItemHeight;
-            addToHistory(targetPage, targetScroll);
-
-            if (listRef.current?.element) {
-                listRef.current.element.scrollTo({
-                    top: targetScroll,
-                    behavior: 'instant',
-                });
-                targetScrollTopRef.current = targetScroll;
-                // Explicitly sync after jump completes
-                updateProgress(targetPage, targetScroll);
-                // Return focus to PDF viewer after jump
-                setFocusMode('pdf');
-                window.focus();
-            }
-        } catch (e) {
-            console.error('Jump error', e);
-        }
-    };
+        },
+        [pdfDocument, addToHistory, setCurrentPage, updateProgress, setFocusMode]
+    );
 
     // --- Dynamic Scaling Logic ---
     // Base dimensions for synchronous scale calculation
@@ -576,13 +584,15 @@ export default function PDFReader({ file }: PDFReaderProps) {
             const offset = props?.scrollOffset ?? props?.target?.scrollTop ?? props?.scrollTop;
             if (typeof offset === 'number') {
                 updatePageFromScroll(offset);
+                // Sync scroll position to store for VimInput access
+                setCurrentScrollTop(offset);
                 if (activeKeys.current.size === 0) {
                     targetScrollTopRef.current = offset;
                     setLastSyncScroll(offset);
                 }
             }
         },
-        [updatePageFromScroll]
+        [updatePageFromScroll, setCurrentScrollTop]
     );
 
     const animateScroll = () => {

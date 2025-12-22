@@ -84,6 +84,11 @@ export default function FinderModal() {
 
     // Navigation Logic
     const handleKeyDown = (e: React.KeyboardEvent) => {
+        // Guard against empty filtered files to prevent division by zero
+        if (filteredFiles.length === 0 && ['ArrowDown', 'ArrowUp', 'Enter'].includes(e.key)) {
+            return;
+        }
+
         if (e.key === 'Escape') {
             e.preventDefault();
             e.stopPropagation();

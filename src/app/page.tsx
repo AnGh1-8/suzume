@@ -1,7 +1,6 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useState } from 'react';
 import { usePDFStore } from '@/store/usePDFStore';
 import clsx from 'clsx';
 import { FileUp, Command, Keyboard, HelpCircle } from 'lucide-react';

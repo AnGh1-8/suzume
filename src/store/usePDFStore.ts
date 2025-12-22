@@ -41,6 +41,7 @@ interface PDFState {
     baseHeight: number; // PDF page height at scale 1
     availableWidth: number; // Viewport width minus sidebar (if applicable)
     availableHeight: number; // Viewport height minus header (if applicable)
+    currentScrollTop: number; // Current scroll position for VimInput access
 
     setFile: (file: File | string | null) => void;
     setNumPages: (num: number) => void;
@@ -83,6 +84,7 @@ interface PDFState {
     zoomIn: () => void;
     zoomOut: () => void;
     updateProgress: (page: number, scrollTop: number) => void;
+    setCurrentScrollTop: (scrollTop: number) => void;
 }
 
 export const usePDFStore = create<PDFState>()(
@@ -115,6 +117,7 @@ export const usePDFStore = create<PDFState>()(
             baseHeight: 800,
             availableWidth: 1000,
             availableHeight: 800,
+            currentScrollTop: 0,
 
             setFile: (file) =>
                 set((state) => {
@@ -370,6 +373,7 @@ export const usePDFStore = create<PDFState>()(
             setBaseHeight: (height: number) => set({ baseHeight: height }),
             setAvailableWidth: (availableWidth: number) => set({ availableWidth }),
             setAvailableHeight: (availableHeight: number) => set({ availableHeight }),
+            setCurrentScrollTop: (currentScrollTop: number) => set({ currentScrollTop }),
 
             setModeAbsolute: (val?: number) =>
                 set((state) => {

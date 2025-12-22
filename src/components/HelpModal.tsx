@@ -5,16 +5,7 @@ import { usePDFStore } from '@/store/usePDFStore';
 import clsx from 'clsx';
 
 export default function HelpModal() {
-    const {
-        helpOpen,
-        toggleHelp,
-        theme,
-        setModeAbsolute,
-        setModeRelative,
-        toggleMode,
-        setBaseWidth: setBaseWidthStore,
-        setAvailableWidth: setAvailableWidthStore,
-    } = usePDFStore();
+    const { helpOpen, toggleHelp, theme } = usePDFStore();
 
     if (!helpOpen) return null;
 
