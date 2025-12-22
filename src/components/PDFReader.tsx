@@ -9,13 +9,6 @@ import AutoSizer from 'react-virtualized-auto-sizer';
 import React, { memo } from 'react';
 
 const Row = memo(({ index, style, renderScale, theme, numPages }: any) => {
-    // Spacer at start (index 0) and end (index numPages + 1)
-    const isSpacer = index === 0 || index === numPages + 1;
-
-    if (isSpacer) {
-        return <div style={style} />;
-    }
-
     return (
         <div
             style={{
@@ -33,10 +26,23 @@ const Row = memo(({ index, style, renderScale, theme, numPages }: any) => {
                 )}
             >
                 <Page
-                    pageNumber={index} // Spacer is 0, first page is 1
+                    pageNumber={index + 1}
                     scale={renderScale}
                     renderTextLayer={true}
                     renderAnnotationLayer={true}
+                    loading={
+                        <div
+                            style={{
+                                width: '100%',
+                                height: '100%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyItems: 'center',
+                            }}
+                        >
+                            Loading...
+                        </div>
+                    }
                 />
             </div>
         </div>
@@ -206,7 +212,7 @@ export default function PDFReader({ file }: PDFReaderProps) {
 
             // Standard logical height jump
             const logicalItemHeight = baseHeightRef.current * scaleRef.current + 24;
-            const targetScroll = targetPage * logicalItemHeight;
+            const targetScroll = (targetPage - 1) * logicalItemHeight;
             addToHistory(targetPage, targetScroll);
 
             if (listRef.current?.element) {
@@ -486,8 +492,8 @@ export default function PDFReader({ file }: PDFReaderProps) {
         // If it's the very first page of a newly loaded document, we want to stay at itemHeight (Doc Top)
         // rather than potentially being snapped higher by a generic "start" align.
         listRef.current.scrollToRow({
-            index: currentPage,
-            align: currentPage === 1 ? 'auto' : 'start',
+            index: currentPage - 1, // 0-based index
+            align: currentPage === 1 ? 'start' : 'start', // Always start is fine now? Or auto
             behavior: 'instant',
         });
     }, [currentPage, numPages]);
@@ -504,7 +510,7 @@ export default function PDFReader({ file }: PDFReaderProps) {
                 targetScrollTopRef.current = restored.scrollTop;
                 hasRestoredPosition.current = true;
             } else if (currentPage === 1) {
-                listRef.current.element.scrollTop = itemHeight;
+                listRef.current.element.scrollTop = 0; // Top is 0 now
                 hasRestoredPosition.current = true;
             } else {
                 // If we have a currentPage > 1 but no scrollTop progress,
@@ -550,8 +556,10 @@ export default function PDFReader({ file }: PDFReaderProps) {
             const currentItemHeight = baseHeightRef.current * scaleRef.current + 24;
             if (currentItemHeight <= 0 || !listRef.current?.element) return;
             const viewportHeight = listRef.current.element.clientHeight;
+            // Simple logic: floor( (scrollTop + halfView) / itemHeight )
+            // But Page 1 is at 0.
             const detectionPoint = scrollTop + viewportHeight / 2;
-            let newPage = Math.floor(detectionPoint / currentItemHeight);
+            let newPage = Math.floor(detectionPoint / currentItemHeight) + 1; // 0-index + 1
             newPage = Math.max(1, Math.min(newPage, numPagesRef.current || 1));
 
             if (!isNaN(newPage) && newPage !== currentPageRef.current) {
@@ -641,8 +649,8 @@ export default function PDFReader({ file }: PDFReaderProps) {
             if (viewportHeight <= 0) return; // Wait for layout
 
             // Document boundaries in logical pixels
-            const docTop = currentItemHeight;
-            const docBottom = (currentNumPages + 1) * currentItemHeight - viewportHeight;
+            const docTop = 0;
+            const docBottom = currentNumPages * currentItemHeight - viewportHeight;
 
             // Clamp: Stop manual scrolling at docTop/docBottom
             // We use Math.max(docTop, docBottom) for the high bound to handle cases where
@@ -756,7 +764,7 @@ export default function PDFReader({ file }: PDFReaderProps) {
                         isInternalPageUpdate.current = true;
                         setCurrentPage(1);
                         const logicalItemHeight = baseHeightRef.current * scaleRef.current + 24;
-                        const targetScroll = logicalItemHeight;
+                        const targetScroll = 0; // Page 1 top
                         addToHistory(1, targetScroll);
 
                         listRef.current.element.scrollTo({
@@ -789,7 +797,7 @@ export default function PDFReader({ file }: PDFReaderProps) {
                         }
                     } else if (listRef.current) {
                         listRef.current.scrollToRow({
-                            index: currentPageRef.current,
+                            index: currentPageRef.current - 1,
                             align,
                             behavior: 'instant',
                         });
@@ -1282,7 +1290,7 @@ export default function PDFReader({ file }: PDFReaderProps) {
                                                     backgroundColor:
                                                         theme === 'dark' ? '#111' : '#f3f4f6',
                                                 }}
-                                                rowCount={numPages ? numPages + 2 : 0}
+                                                rowCount={numPages || 0}
                                                 rowHeight={itemHeight}
                                                 className="scrollbar-hide outline-none"
                                                 rowComponent={Row as any}
