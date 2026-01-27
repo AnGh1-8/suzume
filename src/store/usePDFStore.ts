@@ -2,6 +2,15 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { saveFileToIdb, getFileFromIdb } from '@/lib/persistence';
 
+export interface Highlight {
+    id: string;
+    page: number;
+    color: string;
+    rects: { x: number; y: number; width: number; height: number }[];
+    text: string;
+    timestamp: number;
+}
+
 interface PDFState {
     file: File | string | null;
     numPages: number | null;
@@ -18,6 +27,9 @@ interface PDFState {
     theme: 'light' | 'dark';
     fitMode: 'absolute' | 'relative';
     fitRatio: number; // For relative mode (e.g. 0.9 for 90%)
+    visualMode: boolean; // Visual mode for selection
+    visualAnchor: { page: number; rect: DOMRect | null } | null; // Starting point of selection
+    highlights: Record<string, Highlight[]>; // fileName -> highlights
     jumpHistory: { page: number; scrollTop: number }[];
     historyIndex: number;
     fileProgress: Record<
@@ -85,6 +97,14 @@ interface PDFState {
     zoomOut: () => void;
     updateProgress: (page: number, scrollTop: number) => void;
     setCurrentScrollTop: (scrollTop: number) => void;
+
+    // Visual mode and highlighting
+    setVisualMode: (enabled: boolean) => void;
+    setVisualAnchor: (anchor: { page: number; rect: DOMRect | null } | null) => void;
+    addHighlight: (highlight: Highlight) => void;
+    removeHighlight: (id: string) => void;
+    clearHighlights: () => void;
+    getCurrentFileHighlights: () => Highlight[];
 }
 
 export const usePDFStore = create<PDFState>()(
@@ -118,6 +138,9 @@ export const usePDFStore = create<PDFState>()(
             availableWidth: 1000,
             availableHeight: 800,
             currentScrollTop: 0,
+            visualMode: false,
+            visualAnchor: null,
+            highlights: {},
 
             setFile: (file) =>
                 set((state) => {
@@ -434,6 +457,57 @@ export const usePDFStore = create<PDFState>()(
                         fileProgress: updatedProgress,
                     };
                 }),
+
+            setVisualMode: (enabled) => set({ visualMode: enabled, visualAnchor: enabled ? null : null }),
+            setVisualAnchor: (anchor) => set({ visualAnchor: anchor }),
+            
+            addHighlight: (highlight) =>
+                set((state) => {
+                    const fileName = state.recentFileNames[0];
+                    if (!fileName) return state;
+
+                    const fileHighlights = state.highlights[fileName] || [];
+                    return {
+                        highlights: {
+                            ...state.highlights,
+                            [fileName]: [...fileHighlights, highlight],
+                        },
+                    };
+                }),
+
+            removeHighlight: (id) =>
+                set((state) => {
+                    const fileName = state.recentFileNames[0];
+                    if (!fileName) return state;
+
+                    const fileHighlights = state.highlights[fileName] || [];
+                    return {
+                        highlights: {
+                            ...state.highlights,
+                            [fileName]: fileHighlights.filter((h) => h.id !== id),
+                        },
+                    };
+                }),
+
+            clearHighlights: () =>
+                set((state) => {
+                    const fileName = state.recentFileNames[0];
+                    if (!fileName) return state;
+
+                    return {
+                        highlights: {
+                            ...state.highlights,
+                            [fileName]: [],
+                        },
+                    };
+                }),
+
+            getCurrentFileHighlights: () => {
+                const state = get();
+                const fileName = state.recentFileNames[0];
+                if (!fileName) return [];
+                return state.highlights[fileName] || [];
+            },
         }),
         {
             name: 'suzume-storage',

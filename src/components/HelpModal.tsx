@@ -24,6 +24,19 @@ export default function HelpModal() {
             ],
         },
         {
+            title: 'Visual & Highlights',
+            icon: <Keyboard size={16} />,
+            items: [
+                { key: 'v', desc: 'Enter Visual Mode' },
+                { key: ':hl yellow', desc: 'Highlight (yellow)' },
+                { key: ':hl green', desc: 'Highlight (green)' },
+                { key: ':hl blue', desc: 'Highlight (blue)' },
+                { key: ':hl pink', desc: 'Highlight (pink)' },
+                { key: ':hl orange', desc: 'Highlight (orange)' },
+                { key: ':nohl', desc: 'Clear All Highlights' },
+            ],
+        },
+        {
             title: 'Display & Modes',
             icon: <Layout size={16} />,
             items: [
@@ -119,7 +132,7 @@ export default function HelpModal() {
 
                 {/* Content */}
                 <div className="p-6 overflow-y-auto">
-                    <div className="grid grid-cols-2 gap-x-12 gap-y-8">
+                    <div className="grid grid-cols-2 gap-x-8 gap-y-6">
                         {sections.map((section) => (
                             <div key={section.title} className="space-y-4">
                                 <div
