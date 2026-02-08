@@ -6,6 +6,7 @@ import HelpModal from './HelpModal';
 import FinderModal from './FinderModal';
 import VimInput from './VimInput';
 import { useRef, useEffect } from 'react';
+import clsx from 'clsx';
 
 export default function GlobalShell({ children }: { children: React.ReactNode }) {
     const {
@@ -18,6 +19,8 @@ export default function GlobalShell({ children }: { children: React.ReactNode })
         pendingCommand,
         finderOpen,
         toggleFinder,
+        visualMode,
+        theme,
     } = usePDFStore();
 
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -98,6 +101,18 @@ export default function GlobalShell({ children }: { children: React.ReactNode })
     return (
         <div className="relative w-full h-full">
             {children}
+            {visualMode && (
+                <div
+                    className={clsx(
+                        'fixed top-4 right-4 px-4 py-2 rounded-lg font-mono text-sm font-bold shadow-lg z-50 border-2',
+                        theme === 'dark'
+                            ? 'bg-purple-900/90 text-purple-100 border-purple-500'
+                            : 'bg-purple-100 text-purple-900 border-purple-500'
+                    )}
+                >
+                    -- VISUAL --
+                </div>
+            )}
             <HelpModal />
             <FinderModal />
             <VimInput />

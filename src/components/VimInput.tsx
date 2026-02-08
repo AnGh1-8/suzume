@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useEffect, useState } from 'react';
-import { usePDFStore } from '@/store/usePDFStore';
+import { usePDFStore, Highlight } from '@/store/usePDFStore';
 import clsx from 'clsx';
 
 export default function VimInput() {
@@ -24,6 +24,11 @@ export default function VimInput() {
         availableHeight,
         renderScale,
         currentScrollTop,
+        visualMode,
+        setVisualMode,
+        setVisualAnchor,
+        addHighlight,
+        clearHighlights,
     } = usePDFStore();
 
     useEffect(() => {
@@ -62,6 +67,50 @@ export default function VimInput() {
                 setTheme('light');
             } else if (cmd === 'dark') {
                 setTheme('dark');
+            } else if (['hl', 'highlight'].includes(cmd)) {
+                // Highlight command: :hl <color>
+                const color = parts[1]?.toLowerCase() || 'yellow';
+                const validColors = ['yellow', 'green', 'blue', 'pink', 'orange'];
+                
+                if (!validColors.includes(color)) {
+                    console.warn(`Invalid color: ${color}. Using yellow.`);
+                }
+
+                const selection = window.getSelection();
+                if (selection && selection.rangeCount > 0 && !selection.isCollapsed) {
+                    const range = selection.getRangeAt(0);
+                    const rects = Array.from(range.getClientRects());
+                    
+                    if (rects.length > 0) {
+                        // Get the page container to calculate relative positions
+                        const pageContainer = (range.startContainer as Element).closest('.react-pdf__Page');
+                        if (pageContainer) {
+                            const pageRect = pageContainer.getBoundingClientRect();
+                            
+                            const highlight: Highlight = {
+                                id: `hl-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                                page: currentPage,
+                                color: validColors.includes(color) ? color : 'yellow',
+                                rects: rects.map(rect => ({
+                                    x: (rect.left - pageRect.left) / renderScale,
+                                    y: (rect.top - pageRect.top) / renderScale,
+                                    width: rect.width / renderScale,
+                                    height: rect.height / renderScale,
+                                })),
+                                text: selection.toString(),
+                                timestamp: Date.now(),
+                            };
+
+                            addHighlight(highlight);
+                            selection.removeAllRanges();
+                            setVisualMode(false);
+                            setVisualAnchor(null);
+                        }
+                    }
+                }
+            } else if (cmd === 'nohl' || cmd === 'nohlsearch') {
+                // Clear all highlights
+                clearHighlights();
             } else if (['fullscreen', 'fs'].includes(cmd)) {
                 if (!document.fullscreenElement) {
                     document.documentElement.requestFullscreen();

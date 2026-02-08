@@ -9,6 +9,7 @@ import { usePDFStore } from '@/store/usePDFStore';
 import { useWindowSize, useKey } from 'react-use';
 import { ChevronRight, Menu, X, HelpCircle } from 'lucide-react';
 import PDFOutline, { FlatOutlineItem } from './PDFOutline';
+import HighlightOverlay from './HighlightOverlay';
 import clsx from 'clsx';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
@@ -59,6 +60,7 @@ const Row = memo(({ index, style, renderScale, theme }: RowProps) => {
                         </div>
                     }
                 />
+                <HighlightOverlay pageNumber={index + 1} scale={renderScale} />
             </div>
         </div>
     );
@@ -104,6 +106,9 @@ export default function PDFReader({ file }: PDFReaderProps) {
         fileProgress,
         updateProgress,
         setCurrentScrollTop,
+        visualMode,
+        setVisualMode,
+        setVisualAnchor,
     } = usePDFStore();
 
     const hasRestoredPosition = useRef(false);
@@ -794,12 +799,30 @@ export default function PDFReader({ file }: PDFReaderProps) {
             if (e.key === 'Escape') {
                 e.preventDefault();
                 setPendingCommand(null);
-                if (helpOpen) {
+                if (visualMode) {
+                    setVisualMode(false);
+                    setVisualAnchor(null);
+                    window.getSelection()?.removeAllRanges();
+                } else if (helpOpen) {
                     toggleHelp();
                 } else if (focusMode === 'outline') {
                     setFocusMode('pdf');
                 } else if (sidebarOpen) {
                     setFocusMode('outline');
+                }
+                return;
+            }
+
+            if (e.key === 'v' && focusMode === 'pdf') {
+                e.preventDefault();
+                setVisualMode(!visualMode);
+                if (!visualMode) {
+                    // Entering visual mode
+                    setVisualAnchor({ page: currentPageRef.current, rect: null });
+                } else {
+                    // Exiting visual mode
+                    setVisualAnchor(null);
+                    window.getSelection()?.removeAllRanges();
                 }
                 return;
             }
